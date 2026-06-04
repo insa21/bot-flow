@@ -3,181 +3,212 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const sharp = require('sharp');
 const { log } = require('./utils/logger');
 
 // ============================================================
-//  KONFIGURASI — sesuaikan di sini jika ada perubahan UI
+//  KONFIGURASI
 // ============================================================
 const FLOW_URL = 'https://labs.google/fx/tools/flow';
 
-// ✅ Dikonfirmasi dari debug: Google Flow pakai div[contenteditable]
-const PROMPT_INPUT_CANDIDATES = [
-    '[contenteditable="true"]',
-    'textarea:not(.g-recaptcha-response)',
-    'textarea[placeholder]',
-    'input[type="text"][placeholder]',
-    'input[type="text"]',
-];
+// ✅ Dikonfirmasi: Google Flow pakai div[contenteditable]
+const PROMPT_INPUT_SELECTOR = '[contenteditable="true"]';
 
-// Kandidat tombol kirim
-const SEND_BUTTON_CANDIDATES = [
-    'button[aria-label*="Send"]',
-    'button[aria-label*="Generate"]',
-    'button[aria-label*="Submit"]',
-    'button[type="submit"]',
-    '[data-testid*="send"]',
-    '[data-testid*="submit"]',
+// Kandidat tombol New Conversation / Reset sesi lama
+// Ini mencegah agen Flow dari sesi sebelumnya masih aktif
+const NEW_CONVERSATION_CANDIDATES = [
+    'button[aria-label*="New"]',
+    'button[aria-label*="new"]',
+    'button[aria-label*="Reset"]',
+    'button[aria-label*="Clear"]',
+    '[data-testid*="new"]',
+    '[title*="New"]',
+    'a[href*="flow"]:not([href*="?"])', // link ke halaman flow baru
 ];
 
 const OUTPUT_DIR = path.join(__dirname, 'output');
+
+// Peta resolusi output gambar (pixels)
+// Digunakan bersama setting IMAGE_SIZE di file .env
+const RESOLUTION_MAP = {
+    '1k': 1024,   // 1024 x 1024 px
+    '2k': 2048,   // 2048 x 2048 px
+    '4k': 4096,   // 4096 x 4096 px
+};
 // ============================================================
 
 function randomDelay(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-/**
- * Kill semua proses Chrome yang memakai user data dir yang sama.
- * Mencegah error "profile is already in use / context closed".
- */
 function killExistingChrome() {
     try {
         execSync('taskkill /F /IM chrome.exe /T', { stdio: 'ignore' });
-        log('Chrome lama berhasil ditutup.');
+    } catch { /* tidak ada Chrome yang berjalan */ }
+}
+
+/**
+ * Tunggu elemen tertentu muncul dan visible, lalu kembalikan locatornya.
+ */
+async function waitForElement(page, selector, timeoutMs = 10000) {
+    try {
+        const locator = page.locator(selector).first();
+        await locator.waitFor({ state: 'visible', timeout: timeoutMs });
+        return locator;
     } catch {
-        // Tidak ada Chrome yang berjalan — tidak masalah
+        return null;
     }
 }
 
 /**
- * Coba temukan elemen dari daftar kandidat selector.
- * Mengembalikan locator pertama yang terlihat, atau null.
+ * Coba beberapa selector, kembalikan yang pertama visible.
  */
-async function findVisibleElement(page, candidates, timeoutMs = 5000) {
+async function findFirstVisible(page, candidates, timeoutMs = 3000) {
     for (const selector of candidates) {
-        try {
-            const locator = page.locator(selector).first();
-            await locator.waitFor({ state: 'visible', timeout: timeoutMs });
-            return locator;
-        } catch {
-            // Tidak ditemukan, coba berikutnya
-        }
+        const el = await waitForElement(page, selector, timeoutMs);
+        if (el) return el;
     }
     return null;
 }
 
 /**
- * Debug helper: cetak elemen interaktif + gambar di halaman.
+ * Reset sesi Flow agar agen lama tidak aktif.
+ * Jika tombol New ditemukan: klik, tunggu halaman siap, kembalikan promptInput baru.
+ * Jika tidak ditemukan: JANGAN reload — lanjutkan dengan sesi yang sudah ada.
+ * Return: promptInput setelah reset (atau null jika tidak perlu reset).
  */
-async function debugPageElements(page) {
-    log('=== DEBUG: Elemen yang ditemukan di halaman ===');
-    const info = await page.evaluate(() => {
-        const results = [];
+async function resetFlowSession(page, existingInput, timeoutMs) {
+    const newBtn = await findFirstVisible(page, NEW_CONVERSATION_CANDIDATES, 2000);
+    if (newBtn) {
+        log('Menemukan tombol New, mengklik untuk memulai sesi bersih...');
+        await newBtn.click();
 
-        document.querySelectorAll('textarea').forEach((el, i) => {
-            results.push(`[textarea #${i}] placeholder="${el.placeholder}" class="${el.className.substring(0, 80)}"`);
-        });
-        document.querySelectorAll('input[type="text"], input:not([type])').forEach((el, i) => {
-            results.push(`[input #${i}] placeholder="${el.placeholder}" class="${el.className.substring(0, 80)}"`);
-        });
-        document.querySelectorAll('[contenteditable="true"]').forEach((el, i) => {
-            results.push(`[contenteditable #${i}] tag=${el.tagName} class="${el.className.substring(0, 80)}"`);
-        });
-        document.querySelectorAll('img').forEach((el, i) => {
-            if (i > 10) return;
-            results.push(`[img #${i}] src="${el.src.substring(0, 80)}" class="${el.className.substring(0, 60)}"`);
-        });
+        // Tunggu halaman baru siap setelah klik New
+        try {
+            await page.waitForLoadState('networkidle', { timeout: 10000 });
+        } catch { /* lanjut */ }
+        await page.waitForTimeout(2000);
 
-        return results;
-    });
-
-    if (info.length === 0) {
-        log('Tidak ada elemen ditemukan. Halaman mungkin belum load penuh.');
-    } else {
-        info.forEach(line => log(line));
+        // Cari ulang input prompt di halaman yang sudah di-reset
+        const freshInput = await waitForFlowReady(page, 45000);
+        return freshInput || existingInput; // fallback ke input lama jika tidak ketemu
     }
-    log('=== Akhir DEBUG ===');
+
+    // Tombol New tidak ada — halaman sudah bersih, pakai input yang ada
+    log('Sesi sudah bersih, melanjutkan...');
+    return existingInput;
 }
 
 /**
- * Hitung jumlah gambar di halaman saat ini.
- * Digunakan untuk mendeteksi gambar baru yang muncul setelah generate.
+ * Tunggu halaman Flow siap (kotak input muncul).
+ * Lebih cepat dari fixed delay — langsung lanjut saat elemen ready.
+ * Maksimal menunggu maxWaitMs (default 60 detik).
+ */
+async function waitForFlowReady(page, maxWaitMs = 60000) {
+    log('Menunggu halaman Flow siap...');
+    const input = await waitForElement(page, PROMPT_INPUT_SELECTOR, maxWaitMs);
+    if (input) {
+        log('✅ Halaman siap!');
+        return input;
+    }
+    return null;
+}
+
+/**
+ * Hitung jumlah gambar di halaman (untuk deteksi gambar baru setelah generate).
  */
 async function countImages(page) {
     return page.evaluate(() => document.querySelectorAll('img').length);
 }
 
 /**
- * Isi input prompt — mendukung contenteditable dan textarea/input.
+ * Isi kotak prompt (contenteditable div).
  */
 async function fillPromptInput(page, inputLocator, text) {
     const isContentEditable = await inputLocator.evaluate(el => el.contentEditable === 'true');
 
     await inputLocator.click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(150);
 
     if (isContentEditable) {
         await page.keyboard.press('Control+a');
         await page.keyboard.press('Delete');
-        await page.waitForTimeout(300);
-        await page.keyboard.type(text, { delay: randomDelay(40, 100) });
+        await page.waitForTimeout(200);
+        // Ketik cepat tapi masih terlihat natural
+        await page.keyboard.type(text, { delay: randomDelay(20, 50) });
     } else {
         await inputLocator.click({ clickCount: 3 });
         await page.keyboard.press('Delete');
-        await page.waitForTimeout(300);
-        await inputLocator.pressSequentially(text, { delay: randomDelay(40, 100) });
+        await page.waitForTimeout(200);
+        await inputLocator.pressSequentially(text, { delay: randomDelay(20, 50) });
     }
 }
 
 /**
- * Tunggu hingga gambar baru muncul di halaman dibanding sebelum generate.
- * Mengembalikan { found: bool, newSrcs: string[] } — daftar src dari img baru.
+ * Deteksi gambar baru via network response — JAUH lebih cepat dari polling.
+ * HARUS dipanggil SEBELUM menekan Enter agar tidak ada response yang terlewat.
+ * Return Promise yang resolve saat gambar baru diterima, atau timeout.
  */
-async function waitForNewImage(page, imgCountBefore, maxWaitMs = 120000) {
-    log('  Menunggu gambar hasil muncul...');
-    const pollInterval = 3000;
-    const start = Date.now();
+function setupImageDetection(page, srcsBefore, maxWaitMs) {
+    return new Promise((resolve) => {
+        const collectedUrls = [];
+        let batchTimer = null;
+        const start = Date.now();
 
-    // Ambil semua src yang sudah ada sebelum generate
-    const srcsBefore = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('img')).map(img => img.src)
-    );
+        // Log progres setiap 15 detik agar user tahu masih berjalan
+        const progressInterval = setInterval(() => {
+            const elapsed = Math.round((Date.now() - start) / 1000);
+            log(`  Menunggu generate... ${elapsed}s`);
+        }, 15000);
 
-    while (Date.now() - start < maxWaitMs) {
-        await page.waitForTimeout(pollInterval);
+        const done = (found) => {
+            clearTimeout(batchTimer);
+            clearTimeout(globalTimer);
+            clearInterval(progressInterval);
+            page.off('response', responseHandler);
+            resolve({ found, newSrcs: found ? collectedUrls : [] });
+        };
 
-        const imgCountNow = await countImages(page);
-        if (imgCountNow > imgCountBefore) {
-            log(`  ✅ Gambar baru terdeteksi! (sebelum: ${imgCountBefore}, sekarang: ${imgCountNow})`);
-            await page.waitForTimeout(2000); // beri waktu render selesai
+        // Timeout global: cold start bisa sampai 2-3 menit
+        const globalTimer = setTimeout(() => {
+            log('  ⏱️ Timeout menunggu gambar dari server.');
+            done(false);
+        }, maxWaitMs);
 
-            // Kumpulkan src dari img yang BARU (tidak ada di daftar sebelumnya)
-            const srcsNow = await page.evaluate(() =>
-                Array.from(document.querySelectorAll('img')).map(img => img.src)
-            );
-            const newSrcs = srcsNow.filter(src => !srcsBefore.includes(src) && src.length > 0);
-            log(`  Ditemukan ${newSrcs.length} src gambar baru.`);
+        const responseHandler = (response) => {
+            try {
+                const url = response.url();
+                // Hanya tangkap URL gambar hasil generate yang benar-benar baru
+                if (
+                    url.includes('media.getMediaUrlRedirect') &&
+                    !srcsBefore.includes(url) &&
+                    !collectedUrls.includes(url)
+                ) {
+                    collectedUrls.push(url);
+                    log(`  📸 Gambar ${collectedUrls.length} terdeteksi via network!`);
 
-            return { found: true, newSrcs };
-        }
+                    // Tunggu 2 detik: mungkin ada gambar lagi dalam satu batch
+                    clearTimeout(batchTimer);
+                    batchTimer = setTimeout(() => done(true), 2000);
+                }
+            } catch {
+                // Abaikan error pada response handler
+            }
+        };
 
-        const elapsed = Math.round((Date.now() - start) / 1000);
-        log(`  Menunggu... ${elapsed}s (img: ${imgCountNow})`);
-    }
-
-    return { found: false, newSrcs: [] };
+        page.on('response', responseHandler);
+    });
 }
 
+
 /**
- * Download satu gambar dari URL dan simpan ke filePath.
- * Mendukung tiga jenis URL:
- *   - blob:     → baca bytes via page.evaluate (FileReader di browser)
- *   - data:     → decode base64 langsung
- *   - http/https → page.request.get() — OTOMATIS membawa cookie sesi Google
+ * Download satu gambar:
+ * - blob:  → FileReader di browser
+ * - data:  → decode base64
+ * - https: → page.request.get() (membawa cookie sesi Google)
  */
 async function downloadImage(page, src, filePath) {
     if (src.startsWith('blob:')) {
-        // Blob URL: hanya bisa diakses dari dalam konteks browser
         const base64 = await page.evaluate(async (blobUrl) => {
             const response = await fetch(blobUrl);
             const blob = await response.blob();
@@ -193,7 +224,6 @@ async function downloadImage(page, src, filePath) {
     }
 
     if (src.startsWith('data:image')) {
-        // Data URI: decode base64 langsung
         const base64 = src.split(',')[1];
         if (base64) {
             fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
@@ -203,8 +233,7 @@ async function downloadImage(page, src, filePath) {
     }
 
     if (src.startsWith('http://') || src.startsWith('https://')) {
-        // ✅ Gunakan page.request.get() — otomatis membawa cookie sesi browser
-        // Penting untuk URL Google Flow yang memerlukan autentikasi
+        // page.request.get() otomatis membawa cookie sesi Google
         const response = await page.request.get(src);
         if (response.ok()) {
             const buffer = await response.body();
@@ -215,39 +244,144 @@ async function downloadImage(page, src, filePath) {
         return false;
     }
 
-    return false; // tipe URL tidak dikenal
+    return false;
 }
 
 /**
- * Download semua gambar baru yang ditemukan setelah generate.
- * Setiap gambar disimpan sebagai file PNG terpisah.
- * Returns jumlah gambar yang berhasil didownload.
+ * Download semua gambar baru. Return jumlah yang berhasil.
  */
-async function downloadAllNewImages(page, newSrcs, baseName, outputDir) {
+/**
+ * Resize gambar ke resolusi target menggunakan sharp.
+ * imageSize: 'native' | '1k' | '2k' | '4k'
+ * Jika 'native', tidak ada proses resize.
+ * Output disimpan ke filePath yang sama (overwrite).
+ */
+async function resizeImage(filePath, imageSize) {
+    if (!imageSize || imageSize.toLowerCase() === 'native') return false;
+
+    const targetPx = RESOLUTION_MAP[imageSize.toLowerCase()];
+    if (!targetPx) {
+        log(`  ⚠️  IMAGE_SIZE "${imageSize}" tidak dikenal. Gunakan: native, 1k, 2k, atau 4k.`, 'WARN');
+        return false;
+    }
+
+    try {
+        const tempPath = filePath + '.tmp.png';
+        await sharp(filePath)
+            .resize(targetPx, targetPx, {
+                fit: 'inside',          // jaga aspek rasio, tidak crop
+                withoutEnlargement: false, // izinkan upscale
+                kernel: sharp.kernel.lanczos3, // kualitas terbaik untuk upscale
+            })
+            .png({ quality: 100, compressionLevel: 6 })
+            .toFile(tempPath);
+
+        fs.renameSync(tempPath, filePath);
+        return true;
+    } catch (err) {
+        log(`  ❌ Gagal resize gambar: ${err.message}`, 'ERROR');
+        return false;
+    }
+}
+
+async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSize) {
     if (newSrcs.length === 0) return 0;
+
+    // Tentukan suffix nama file berdasarkan resolusi
+    const sizeSuffix = (!imageSize || imageSize.toLowerCase() === 'native') ? '' : `_${imageSize.toLowerCase()}`;
 
     let downloaded = 0;
     for (let i = 0; i < newSrcs.length; i++) {
         const src = newSrcs[i];
-        const filePath = path.join(outputDir, `${baseName}_${i + 1}.png`);
-        log(`  Mendownload gambar ${i + 1}/${newSrcs.length}: ${src.substring(0, 60)}...`);
+        const filePath = path.join(outputDir, `${baseName}${sizeSuffix}_${i + 1}.png`);
+        log(`  Mendownload ${i + 1}/${newSrcs.length}...`);
 
-        try {
-            const ok = await downloadImage(page, src, filePath);
-            if (ok) {
-                log(`  ✅ Download berhasil: ${path.basename(filePath)}`, 'SUCCESS');
-                downloaded++;
-            } else {
-                log(`  ⚠️  Download gagal untuk gambar ${i + 1} (URL tidak didukung atau error)`, 'WARN');
+        let ok = false;
+        // Coba download hingga 2 kali jika gagal (URL mungkin belum siap)
+        for (let dlAttempt = 1; dlAttempt <= 2; dlAttempt++) {
+            try {
+                ok = await downloadImage(page, src, filePath);
+                if (ok) break;
+                if (dlAttempt < 2) await page.waitForTimeout(2000);
+            } catch (err) {
+                if (dlAttempt < 2) await page.waitForTimeout(2000);
+                else log(`  ❌ Error download gambar ${i + 1}: ${err.message}`, 'ERROR');
             }
-        } catch (err) {
-            log(`  ❌ Error saat download gambar ${i + 1}: ${err.message}`, 'ERROR');
+        }
+
+        if (ok) {
+            // Resize jika IMAGE_SIZE bukan 'native'
+            const resized = await resizeImage(filePath, imageSize);
+            if (resized) {
+                const meta = await sharp(filePath).metadata();
+                log(`  ✅ Tersimpan (${imageSize.toUpperCase()} — ${meta.width}x${meta.height}px): ${path.basename(filePath)}`, 'SUCCESS');
+            } else {
+                log(`  ✅ Tersimpan (native): ${path.basename(filePath)}`, 'SUCCESS');
+            }
+            downloaded++;
+        } else {
+            log(`  ⚠️  Gagal download gambar ${i + 1}`, 'WARN');
         }
     }
 
     return downloaded;
 }
 
+// ============================================================
+//  MAIN
+// ============================================================
+
+/**
+ * Cek apakah halaman masih hidup (belum ditutup).
+ */
+async function isPageAlive(page) {
+    try {
+        await page.evaluate(() => true);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Setup halaman baru: buka Flow, tunggu siap, reset sesi lama.
+ * Dipanggil saat pertama kali dan saat halaman mati di tengah run.
+ */
+async function setupPage(context, timeoutMs) {
+    const page = await context.newPage();
+
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
+    log(`Membuka ${FLOW_URL} ...`);
+    await page.goto(FLOW_URL, { waitUntil: 'load', timeout: timeoutMs });
+
+    try {
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
+    } catch { /* lanjut saja */ }
+    await page.waitForTimeout(3000);
+
+    // Tunggu kotak input muncul
+    let promptInput = await waitForFlowReady(page, 60000);
+
+    if (!promptInput) {
+        log('Kotak input belum muncul. Mungkin perlu login.', 'WARN');
+        log('Silakan login di jendela browser. Menunggu hingga 120 detik...', 'WARN');
+        promptInput = await waitForFlowReady(page, 120000);
+        if (!promptInput) return { page, promptInput: null };
+    }
+
+    // Reset agen Flow dari sesi sebelumnya
+    log('Mereset sesi Flow sebelumnya...');
+    promptInput = await resetFlowSession(page, promptInput, timeoutMs);
+
+    return { page, promptInput };
+}
+
+// ============================================================
+//  MAIN
+// ============================================================
 async function runAutomation() {
     if (!fs.existsSync(OUTPUT_DIR)) {
         fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -266,21 +400,22 @@ async function runAutomation() {
         .filter(p => p.length > 0 && !p.startsWith('#'));
 
     if (prompts.length === 0) {
-        log('prompts.txt tidak memiliki prompt yang valid.', 'ERROR');
+        log('prompts.txt kosong. Tambahkan prompt terlebih dahulu.', 'ERROR');
         return;
     }
 
-    log(`Ditemukan ${prompts.length} prompt untuk diproses.`);
+    const imageSize = (process.env.IMAGE_SIZE || 'native').toLowerCase();
+    const sizeLabel = imageSize === 'native' ? 'native (asli)' : `${imageSize.toUpperCase()} (${RESOLUTION_MAP[imageSize] || '?'}px)`;
+    log(`Ditemukan ${prompts.length} prompt. Resolusi output: ${sizeLabel}`);
 
-    // ✅ FIX: Tutup Chrome lama agar tidak ada konflik profile/session
-    log('Memastikan tidak ada Chrome lama yang berjalan...');
     killExistingChrome();
-    await new Promise(r => setTimeout(r, 2000)); // tunggu proses benar-benar mati
+    await new Promise(r => setTimeout(r, 1500));
 
     const userDataDir = process.env.USER_DATA_DIR || './browser_session';
     const isHeadless = process.env.HEADLESS === 'true';
     const timeoutMs = parseInt(process.env.TIMEOUT_MS) || 60000;
     const maxRetries = parseInt(process.env.MAX_RETRIES) || 3;
+
 
     log('Meluncurkan browser...');
     const context = await chromium.launchPersistentContext(userDataDir, {
@@ -296,128 +431,124 @@ async function runAutomation() {
         ],
     });
 
-    const page = await context.newPage();
-
-    await page.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
-
     try {
-        log(`Membuka ${FLOW_URL} ...`);
-        await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-        await page.waitForTimeout(4000);
+        // Setup halaman pertama kali
+        let { page, promptInput } = await setupPage(context, timeoutMs);
 
-        log('Menjalankan debug awal...');
-        await debugPageElements(page);
-
-        log('---');
-        log('⚠️  PENTING: Jika belum login, silakan login sekarang di jendela browser.');
-        log('⚠️  Script menunggu 30 detik...');
-        log('---');
-        await page.waitForTimeout(30000);
-
-        await debugPageElements(page);
-
-        // Cari input prompt
-        const promptInput = await findVisibleElement(page, PROMPT_INPUT_CANDIDATES, 8000);
         if (!promptInput) {
-            log('❌ Kotak input prompt tidak ditemukan!', 'ERROR');
-            log('Petunjuk: Buka DevTools di browser, inspeksi kotak prompt, update PROMPT_INPUT_CANDIDATES di index.js.', 'ERROR');
-            await page.screenshot({ path: path.join(OUTPUT_DIR, '_debug_no_input_found.png') });
+            log('❌ Gagal mendapatkan kotak input. Script berhenti.', 'ERROR');
+            await context.close();
             return;
         }
 
-        log('✅ Kotak input prompt ditemukan!');
+        log('✅ Siap! Memulai pemrosesan prompt...\n');
 
         for (let i = 0; i < prompts.length; i++) {
             const prompt = prompts[i];
-            log(`\n[${i + 1}/${prompts.length}] Memproses: "${prompt.substring(0, 70)}"`);
+            log(`[${i + 1}/${prompts.length}] "${prompt.substring(0, 70)}"`);
 
             let success = false;
 
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
-                    // Catat jumlah gambar SEBELUM generate
-                    const imgCountBefore = await countImages(page);
-
-                    // 1. Isi prompt
-                    log(`  Attempt ${attempt}: Mengisi prompt...`);
-                    await fillPromptInput(page, promptInput, prompt);
-                    await page.waitForTimeout(randomDelay(800, 1500));
-
-                    // 2. Kirim
-                    const sendBtn = await findVisibleElement(page, SEND_BUTTON_CANDIDATES, 2000);
-                    if (sendBtn) {
-                        log('  Mengklik tombol kirim...');
-                        await sendBtn.click();
-                    } else {
-                        log('  Tombol kirim tidak ditemukan, menekan Enter...');
-                        await page.keyboard.press('Enter');
+                    // Cek apakah halaman masih hidup sebelum mulai
+                    if (!await isPageAlive(page)) {
+                        log('  Halaman tertutup! Membuka halaman baru...', 'WARN');
+                        const result = await setupPage(context, timeoutMs);
+                        page = result.page;
+                        promptInput = result.promptInput;
+                        if (!promptInput) throw new Error('Gagal setup halaman baru.');
+                        log('  ✅ Halaman baru siap.');
                     }
 
-                    log(`  Generate dimulai (img count sebelum: ${imgCountBefore})...`);
+                    const srcsBefore = await page.evaluate(() =>
+                        Array.from(document.querySelectorAll('img')).map(img => img.src)
+                    );
 
-                    // 3. Tunggu gambar baru muncul di DOM
-                    const { found: resultFound, newSrcs } = await waitForNewImage(page, imgCountBefore, timeoutMs * 2);
+                    // 1. Isi prompt
+                    await fillPromptInput(page, promptInput, prompt);
+                    await page.waitForTimeout(randomDelay(400, 700));
+
+                    // 2. Setup deteksi SEBELUM Enter — agar tidak ada response yang terlewat
+                    //    cold start Google Flow bisa 60-120 detik, maxWaitMs diberi 3x timeout
+                    const detectionPromise = setupImageDetection(page, srcsBefore, timeoutMs * 3);
+
+                    // 3. Kirim prompt
+                    await page.keyboard.press('Enter');
+                    log('  Generate dimulai...');
+
+                    // 4. Tunggu gambar dari network (instan saat response tiba)
+                    const { found: resultFound, newSrcs } = await detectionPromise;
 
                     const timestamp = Date.now();
                     const safeName = prompt.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 40);
                     const baseName = `${safeName}_${timestamp}`;
 
                     if (resultFound) {
-                        // 4a. Download gambar asli (file langsung, bukan screenshot)
-                        const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR);
-
+                        const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR, imageSize);
                         if (dlCount > 0) {
-                            log(`  ✅ ${dlCount} gambar berhasil didownload ke folder output/`, 'SUCCESS');
+                            log(`  ✅ ${dlCount} gambar didownload.\n`, 'SUCCESS');
+                            success = true; // Berhasil — keluar dari retry loop
+                            break;
+                        }
+                        // Download gagal: jangan set success=true, biarkan retry
+                        if (attempt < maxRetries) {
+                            log('  ⚠️  Download gagal, mencoba lagi...\n', 'WARN');
                         } else {
-                            // Fallback: download gagal, pakai screenshot
-                            log('  ⚠️  Download langsung gagal, menggunakan screenshot sebagai fallback...', 'WARN');
-                            const screenshotPath = path.join(OUTPUT_DIR, `${baseName}_screenshot.png`);
-                            await page.screenshot({ path: screenshotPath, fullPage: false });
-                            log(`  ✅ Screenshot disimpan: ${screenshotPath}`, 'SUCCESS');
+                            const sp = path.join(OUTPUT_DIR, `${baseName}_screenshot.png`);
+                            await page.screenshot({ path: sp });
+                            log(`  ⚠️  Download gagal setelah ${maxRetries}x. Screenshot: ${path.basename(sp)}\n`, 'WARN');
                         }
                     } else {
-                        // 4b. Timeout — ambil screenshot untuk dicek manual
-                        log('  ⚠️  Gambar tidak terdeteksi otomatis. Mengambil screenshot...', 'WARN');
-                        const screenshotPath = path.join(OUTPUT_DIR, `${baseName}_perlu_cek.png`);
-                        await page.screenshot({ path: screenshotPath, fullPage: false });
-                        log(`  Screenshot diambil: ${screenshotPath}`, 'WARN');
+                        // Timeout — jangan set success=true, biarkan retry
+                        if (attempt < maxRetries) {
+                            log(`  ⚠️  Timeout attempt ${attempt}. Mencoba lagi...\n`, 'WARN');
+                        } else {
+                            const sp = path.join(OUTPUT_DIR, `${baseName}_timeout.png`);
+                            await page.screenshot({ path: sp });
+                            log(`  ⚠️  Timeout setelah ${maxRetries}x percobaan. Screenshot: ${path.basename(sp)}\n`, 'WARN');
+                        }
                     }
 
-                    success = true;
-                    break;
-
                 } catch (err) {
+                    const isPageClosed = err.message.includes('closed') || err.message.includes('Target page');
                     log(`  ❌ Attempt ${attempt} gagal: ${err.message}`, 'ERROR');
+
                     if (attempt < maxRetries) {
-                        const waitTime = randomDelay(5000, 10000);
-                        log(`  Menunggu ${Math.round(waitTime / 1000)}s sebelum mencoba lagi...`);
-                        await new Promise(r => setTimeout(r, waitTime)); // Gunakan setTimeout, bukan page.waitForTimeout
+                        if (isPageClosed) {
+                            // Halaman mati — langsung setup ulang tanpa jeda
+                            log('  Halaman mati. Setup ulang halaman...', 'WARN');
+                            try {
+                                const result = await setupPage(context, timeoutMs);
+                                page = result.page;
+                                promptInput = result.promptInput;
+                            } catch (setupErr) {
+                                log(`  Gagal setup ulang: ${setupErr.message}`, 'ERROR');
+                            }
+                        } else {
+                            await new Promise(r => setTimeout(r, randomDelay(3000, 6000)));
+                        }
                     }
                 }
             }
 
             if (!success) {
-                log(`❌ Prompt "${prompt.substring(0, 40)}" gagal setelah ${maxRetries} percobaan.`, 'ERROR');
+                log(`❌ Prompt "${prompt.substring(0, 40)}" gagal setelah ${maxRetries} percobaan.\n`, 'ERROR');
             }
 
+            // Jeda antar prompt
             if (i < prompts.length - 1) {
-                const gap = randomDelay(5000, 10000);
-                log(`Jeda ${Math.round(gap / 1000)}s sebelum prompt berikutnya...`);
-                await page.waitForTimeout(gap);
+                const gap = randomDelay(2000, 4000);
+                log(`Jeda ${Math.round(gap / 1000)}s...`);
+                try { await page.waitForTimeout(gap); } catch { await new Promise(r => setTimeout(r, gap)); }
             }
         }
 
-        log('\n🎉 Semua prompt selesai diproses!', 'SUCCESS');
-        log(`Gambar tersimpan di folder: ${OUTPUT_DIR}`, 'SUCCESS');
+        log('\n🎉 Selesai! Semua prompt sudah diproses.', 'SUCCESS');
+        log(`📁 Gambar tersimpan di: ${OUTPUT_DIR}`, 'SUCCESS');
 
     } catch (error) {
-        log(`Terjadi kesalahan fatal: ${error.message}`, 'ERROR');
-        try {
-            await page.screenshot({ path: path.join(OUTPUT_DIR, '_debug_fatal_error.png') });
-            log('Screenshot error disimpan di folder output.');
-        } catch {}
+        log(`Kesalahan fatal: ${error.message}`, 'ERROR');
     } finally {
         log('Menutup browser...');
         try { await context.close(); } catch {}

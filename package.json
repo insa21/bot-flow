@@ -8,6 +8,7 @@
     },
     "dependencies": {
         "dotenv": "^16.4.5",
-        "playwright": "^1.42.1"
+        "playwright": "^1.42.1",
+        "sharp": "^0.34.5"
     }
 }
