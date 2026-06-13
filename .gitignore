@@ -1,6 +1,8 @@
 node_modules/
 browser_session/
 output/
+tmp_downloads/
+logs/
 .env
 
 
