@@ -4,7 +4,7 @@
 const path   = require('path');
 const fs     = require('fs');
 const { spawn } = require('child_process');
-const { writeEnv, writePrompts, OUTPUT_DIR, ROOT } = require('./windowHandlers');
+const { writeEnv, writePrompts, OUTPUT_DIR, CONFIG_ROOT, APP_PATH } = require('./windowHandlers');
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let botProcess   = null;
@@ -86,7 +86,7 @@ function setupBotHandlers(ipcMain, win) {
                 MAX_RETRIES: config.maxRetries || '3',
                 CONTEXT_MENU_TIMEOUT_MS: config.ctxTimeout || '15000',
                 DOWNLOAD_TIMEOUT_MS: config.dlTimeout || '300000',
-                USER_DATA_DIR: './browser_session',
+                USER_DATA_DIR: path.join(CONFIG_ROOT, 'browser_session'),
                 OUTPUT_DIR: outDir,
             };
             writeEnv(envConfig);
@@ -97,9 +97,34 @@ function setupBotHandlers(ipcMain, win) {
 
             startOutputWatcher(win, outDir);
 
-            botProcess = spawn('node', ['index.js'], {
-                cwd: ROOT, env: { ...process.env, OUTPUT_DIR: outDir }, windowsHide: true,
-            });
+            const isPackaged = !process.defaultApp && !/node_modules[\\/]electron[\\/]/.test(process.execPath);
+            const botPath = path.join(APP_PATH, 'index.js');
+
+            const botEnv = {
+                ...process.env,
+                OUTPUT_DIR: outDir,
+                LOG_DIR: path.join(CONFIG_ROOT, 'logs'),
+                DOWNLOADS_TEMP_DIR: path.join(CONFIG_ROOT, 'tmp_downloads'),
+                PROMPTS_PATH: path.join(CONFIG_ROOT, 'prompts.txt'),
+                DOTENV_CONFIG_PATH: path.join(CONFIG_ROOT, '.env')
+            };
+
+            if (isPackaged) {
+                botProcess = spawn(process.execPath, [botPath], {
+                    cwd: CONFIG_ROOT,
+                    env: {
+                        ...botEnv,
+                        ELECTRON_RUN_AS_NODE: '1',
+                    },
+                    windowsHide: true,
+                });
+            } else {
+                botProcess = spawn('node', [botPath], {
+                    cwd: CONFIG_ROOT,
+                    env: botEnv,
+                    windowsHide: true,
+                });
+            }
 
             sendStatus(win, 'running');
             sendLog(win, '[GUI] ✅ Bot started.');

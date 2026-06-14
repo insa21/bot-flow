@@ -1,14 +1,17 @@
 // handlers/windowHandlers.js — IPC handler untuk kontrol window & config/prompts
 'use strict';
 
-const { dialog, shell } = require('electron');
+const { dialog, shell, app } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
-const ROOT         = path.join(__dirname, '..', '..');
-const ENV_FILE     = path.join(ROOT, '.env');
-const PROMPTS_FILE = path.join(ROOT, 'prompts.txt');
-const OUTPUT_DIR   = path.join(ROOT, 'output');
+const isPackaged   = app.isPackaged;
+const APP_PATH     = app.getAppPath();
+const CONFIG_ROOT  = isPackaged ? path.dirname(process.execPath) : APP_PATH;
+
+const ENV_FILE     = path.join(CONFIG_ROOT, '.env');
+const PROMPTS_FILE = path.join(CONFIG_ROOT, 'prompts.txt');
+const OUTPUT_DIR   = path.join(CONFIG_ROOT, 'output');
 
 // ─── .env helpers ────────────────────────────────────────────────────────────
 function readEnv() {
@@ -65,4 +68,4 @@ function setupWindowHandlers(ipcMain, win) {
     });
 }
 
-module.exports = { setupWindowHandlers, readEnv, writeEnv, readPrompts, writePrompts, OUTPUT_DIR, ROOT };
+module.exports = { setupWindowHandlers, readEnv, writeEnv, readPrompts, writePrompts, OUTPUT_DIR, CONFIG_ROOT, APP_PATH };

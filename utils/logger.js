@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOG_DIR = path.join(__dirname, '..', 'logs');
+const LOG_DIR = process.env.LOG_DIR 
+    ? path.resolve(process.env.LOG_DIR) 
+    : path.join(process.cwd(), 'logs');
 if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
 }

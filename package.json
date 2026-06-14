@@ -2,7 +2,7 @@
     "name": "google-flow-bot",
     "version": "1.0.0",
     "description": "Playwright automation for Google Flow",
-    "main": "index.js",
+    "main": "gui/main.js",
     "scripts": {
         "start": "node index.js",
         "gui": "electron gui/main.js",

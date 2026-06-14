@@ -1,4 +1,6 @@
-require('dotenv').config();
+require('dotenv').config({
+    path: process.env.DOTENV_CONFIG_PATH || require('path').join(process.cwd(), '.env')
+});
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +27,9 @@ const NEW_CONVERSATION_CANDIDATES = [
 const OUTPUT_DIR = process.env.OUTPUT_DIR
     ? path.resolve(process.env.OUTPUT_DIR)
     : path.join(__dirname, 'output');
-const DOWNLOADS_TEMP_DIR = path.join(__dirname, 'tmp_downloads');
+const DOWNLOADS_TEMP_DIR = process.env.DOWNLOADS_TEMP_DIR
+    ? path.resolve(process.env.DOWNLOADS_TEMP_DIR)
+    : path.join(process.cwd(), 'tmp_downloads');
 const PROGRESS_FILE = path.join(OUTPUT_DIR, '.progress.json');
 
 
@@ -961,7 +965,7 @@ async function runAutomation() {
     log(`📋 Log saved in: ${LOG_FILE}`);
 
     // ── Baca prompts ──
-    const promptsPath = path.join(__dirname, 'prompts.txt');
+    const promptsPath = process.env.PROMPTS_PATH || path.join(process.cwd(), 'prompts.txt');
     if (!fs.existsSync(promptsPath)) { log('File prompts.txt not found!', 'ERROR'); return; }
 
     const prompts = fs.readFileSync(promptsPath, 'utf-8')
