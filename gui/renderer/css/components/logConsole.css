@@ -1,0 +1,240 @@
+/* css/components/logConsole.css — Log panel, log lines, filter pills, stats bar */
+
+/* ══════════════  LOG PANEL  ════════════════════════════════════ */
+#log-panel {
+    position:   relative;
+    flex:       1;
+    background: linear-gradient(180deg, rgba(10,12,20,.95) 0%, rgba(16,19,30,.98) 100%);
+    border:     1px solid rgba(255,255,255,.06);
+    border-radius: 11px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size:   12px;
+    line-height: 1.75;
+    padding:     14px;
+    box-shadow:  0 16px 48px rgba(0,0,0,.6), inset 0 1px 3px rgba(255,255,255,.02);
+}
+
+/* ── Log Lines ──────────────────────────────────────────────── */
+#log-lines      { display: flex; flex-direction: column; gap: 1px; position: relative; z-index: 10; }
+
+.log-line {
+    padding:       6px 10px;
+    border-radius: 6px;
+    white-space:   pre-wrap;
+    word-break:    break-all;
+    display:       flex;
+    gap:           12px;
+    align-items:   center;
+    border:        1px solid transparent;
+    background:    rgba(255,255,255,.005);
+    position:      relative;
+    overflow:      hidden;
+    transition:    background .15s ease, border-color .15s ease, transform .1s ease;
+    animation:     fadeSlideIn .2s cubic-bezier(.2,.8,.2,1);
+}
+.log-line::before {
+    content:      '';
+    position:     absolute;
+    top: 0; left: 0; bottom: 0;
+    width:        3px;
+    border-radius: 3px 0 0 3px;
+    background:   transparent;
+}
+.log-line:hover {
+    background:  rgba(255,255,255,.025);
+    border-color: rgba(255,255,255,.04);
+    transform:   translateX(2px);
+}
+
+/* Log type colors */
+.log-line.INFO                  { color: #cbd5e1; }
+.log-line.INFO::before          { background: var(--color-blue); }
+.log-line.INFO:hover            { border-color: rgba(59,130,246,.12); }
+
+.log-line.SUCCESS               { color: #4ade80; background: rgba(34,197,94,.01); }
+.log-line.SUCCESS::before       { background: var(--color-green); }
+.log-line.SUCCESS:hover         { border-color: rgba(34,197,94,.18); background: rgba(34,197,94,.02); }
+
+.log-line.WARN                  { color: #fbbf24; background: rgba(245,158,11,.01); }
+.log-line.WARN::before          { background: var(--color-amber); }
+.log-line.WARN:hover            { border-color: rgba(245,158,11,.18); background: rgba(245,158,11,.02); }
+
+.log-line.ERROR                 { color: #f87171; background: rgba(239,68,68,.015); }
+.log-line.ERROR::before         { background: var(--color-red); }
+.log-line.ERROR:hover           { border-color: rgba(239,68,68,.22); background: rgba(239,68,68,.03); }
+
+.log-line.GUI                   { color: #c7d2fe; background: rgba(123,47,247,.01); }
+.log-line.GUI::before           { background: var(--color-accent2); }
+.log-line.GUI:hover             { border-color: rgba(123,47,247,.18); background: rgba(123,47,247,.02); }
+
+.log-line.STDERR                { color: #f472b6; background: rgba(244,114,182,.01); }
+.log-line.STDERR::before        { background: #f472b6; }
+.log-line.STDERR:hover          { border-color: rgba(244,114,182,.18); background: rgba(244,114,182,.02); }
+
+/* Log parts */
+.log-time {
+    color:        var(--color-text-muted);
+    font-size:    10px;
+    font-weight:  500;
+    user-select:  none;
+    flex-shrink:  0;
+    font-family:  var(--font-mono);
+    background:   rgba(255,255,255,.03);
+    border:       1px solid rgba(255,255,255,.05);
+    padding:      1.5px 6px;
+    border-radius: 4px;
+    opacity:      0.8;
+}
+.log-icon-wrap {
+    display:     inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.log-msg {
+    flex:        1;
+    font-family: var(--font-mono);
+    font-size:   11.5px;
+    line-height: 1.5;
+}
+
+/* Empty state */
+.log-empty-state {
+    position:        absolute;
+    inset:           0;
+    display:         flex;
+    flex-direction:  column;
+    align-items:     center;
+    justify-content: center;
+    gap:             12px;
+    color:           var(--color-text-muted);
+    pointer-events:  none;
+}
+.log-empty-icon {
+    opacity: 0.20;
+    color:   var(--color-text-dim);
+}
+.log-empty-text { text-align: center; }
+.log-empty-title {
+    font-size:   12px;
+    font-weight: 600;
+    color:       var(--color-text-dim);
+}
+.log-empty-sub {
+    font-size:  11px;
+    color:      var(--color-text-muted);
+    margin-top: 2px;
+}
+#log-empty.hidden { display: none !important; }
+
+/* Match highlight for search in log panel */
+.log-search-match {
+    background:    rgba(251, 191, 36, 0.35) !important;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.7) !important;
+    color:         #ffffff !important;
+    border-radius: 2px;
+}
+
+/* ══════════════  LOG STATS BAR  ════════════════════════════════ */
+#log-stats-bar {
+    display:         flex;
+    gap:             16px;
+    align-items:     center;
+    justify-content: space-between;
+    flex-shrink:     0;
+    background:      linear-gradient(90deg, rgba(10,12,20,.6) 0%, rgba(16,19,30,.4) 100%);
+    border:          1px solid var(--color-border);
+    border-radius:   9px;
+    padding:         8px 14px;
+    font-size:       11px;
+    color:           var(--color-text-dim);
+    box-shadow:      inset 0 1px 2px rgba(255,255,255,.02);
+    transition:      all .25s ease;
+}
+.log-stats-group {
+    display:  flex;
+    gap:      16px;
+    flex-wrap: wrap;
+}
+.log-stat-item {
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+}
+.log-stat-dot {
+    width:         6px;
+    height:        6px;
+    border-radius: 50%;
+}
+.log-stat-label {
+    font-size:      9px;
+    font-weight:    600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color:          var(--color-text-muted);
+}
+.log-stat-val {
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+/* Dot and value colors */
+.blue-dot   { background: #60a5fa; }
+.green-dot  { background: #4ade80; }
+.amber-dot  { background: #fbbf24; }
+.red-dot    { background: #f87171; }
+.blue-val   { color: #60a5fa; }
+.green-val  { color: #4ade80; }
+.amber-val  { color: #fbbf24; }
+.red-val    { color: #f87171; }
+
+/* Live indicator */
+.console-live-indicator {
+    display:         flex;
+    align-items:     center;
+    gap:             6px;
+    font-size:       9px;
+    color:           var(--color-green);
+    text-transform:  uppercase;
+    letter-spacing:  .1em;
+    font-weight:     700;
+    font-family:     var(--font-mono);
+}
+.live-pulse {
+    display:      inline-block;
+    width:        6px;
+    height:       6px;
+    background:   var(--color-green);
+    border-radius: 50%;
+    animation:    live-pulse-glow 2s infinite;
+}
+
+/* ══════════════  FILTER PILLS  ═════════════════════════════════ */
+.filter-pill {
+    font-size:      10px;
+    font-weight:    600;
+    padding:        3.5px 10px;
+    border-radius:  6px;
+    border:         1px solid rgba(255,255,255,.05);
+    background:     rgba(255,255,255,.015);
+    color:          var(--color-text-dim);
+    cursor:         pointer;
+    transition:     all .2s cubic-bezier(.4,0,.2,1);
+    outline:        none;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.filter-pill:hover {
+    border-color: rgba(255,255,255,.12);
+    color:        var(--color-text-d);
+    background:   rgba(255,255,255,.04);
+}
+
+/* Aktif per kategori */
+.filter-pill.active[data-filter="all"]     { background: rgba(0,210,255,.08); border-color: rgba(0,210,255,.35); color: var(--color-accent); box-shadow: 0 0 12px rgba(0,210,255,.15); }
+.filter-pill.active[data-filter="INFO"]    { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.35); color: #60a5fa; box-shadow: 0 0 12px rgba(59,130,246,.15); }
+.filter-pill.active[data-filter="SUCCESS"] { background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.35); color: #4ade80; box-shadow: 0 0 12px rgba(34,197,94,.15); }
+.filter-pill.active[data-filter="WARN"]    { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.35); color: #fbbf24; box-shadow: 0 0 12px rgba(245,158,11,.15); }
+.filter-pill.active[data-filter="ERROR"]   { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.35); color: #f87171; box-shadow: 0 0 12px rgba(239,68,68,.15); }
+.filter-pill.active[data-filter="GUI"]     { background: rgba(123,47,247,.08); border-color: rgba(123,47,247,.35); color: #c7d2fe; box-shadow: 0 0 12px rgba(123,47,247,.15); }

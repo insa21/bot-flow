@@ -1,0 +1,59 @@
+/* css/components/titlebarControls.css — Tombol titlebar dan section-icon sidebar */
+
+/* ══════════════  TITLEBAR BUTTON  ══════════════════════════════ */
+#titlebar-controls {
+    display:         flex;
+    align-items:     center;
+    gap:             8px;
+    padding-right:   4px;
+}
+.titlebar-btn {
+    width:           12px;
+    height:          12px;
+    border-radius:   50%;
+    border:          none;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    cursor:          pointer;
+    padding:         0;
+    transition:      transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, box-shadow 0.15s ease;
+    -webkit-app-region: no-drag;
+    flex-shrink:     0;
+}
+.titlebar-btn:hover {
+    transform:       scale(1.12);
+}
+#btn-close {
+    background-color: #ff5f56;
+}
+#btn-close:hover {
+    box-shadow: 0 0 8px rgba(255, 95, 86, 0.5);
+}
+#btn-minimize {
+    background-color: #ffbd2e;
+}
+#btn-minimize:hover {
+    box-shadow: 0 0 8px rgba(255, 189, 46, 0.5);
+}
+#btn-maximize {
+    background-color: #27c93f;
+}
+#btn-maximize:hover {
+    box-shadow: 0 0 8px rgba(39, 201, 63, 0.5);
+}
+
+/* ══════════════  SECTION ICON  ═════════════════════════════════ */
+.section-icon {
+    width:           26px;
+    height:          26px;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    background:      rgba(0, 210, 255, .08);
+    border:          1px solid rgba(0, 210, 255, .15);
+    border-radius:   7px;
+    color:           var(--color-accent);
+    flex-shrink:     0;
+    transition:      box-shadow .2s ease;
+}

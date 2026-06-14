@@ -1,415 +1,293 @@
-# 🤖 Google Flow Bot
+# 🤖 Flow Bot
 
-> Otomasi download gambar dari **Google Flow (labs.google/fx/tools/flow)** menggunakan Playwright — support resolusi **1K / 2K / 4K**, resume otomatis, dan anti-detection.
+![Flow Bot Banner](gui/renderer/flow_bot_banner.png)
+
+> **Flow Bot** adalah aplikasi otomasi cerdas untuk men-download dan mengelola hasil generate gambar dari **Google Flow (labs.google/fx/tools/flow)**. Proyek ini hadir dalam dua versi: **CLI (Command Line Interface)** yang cepat dan minimalis, serta **GUI (Graphical User Interface)** modern berbasis **Electron** dengan desain premium (glassmorphic dark-theme) yang dilengkapi dengan dasbor pemantauan, editor prompt interaktif, konsol aktivitas, dan galeri manajemen gambar yang canggih.
 
 ---
 
 ## 📋 Daftar Isi
 
-- [Fitur Utama](#-fitur-utama)
-- [Struktur Proyek](#-struktur-proyek)
-- [Prasyarat](#-prasyarat)
-- [Instalasi](#-instalasi)
-- [Konfigurasi](#-konfigurasi)
-- [Cara Pakai](#-cara-pakai)
-- [Format prompts.txt](#-format-promptstxt)
-- [Resolusi Download](#-resolusi-download)
-- [Cara Kerja](#-cara-kerja)
-- [Log & Debugging](#-log--debugging)
-- [Troubleshooting](#-troubleshooting)
-- [Struktur Output](#-struktur-output)
+- [✨ Fitur Utama](#-fitur-utama)
+- [🛠️ Teknologi Yang Digunakan](#️-teknologi-yang-digunakan)
+- [📁 Struktur Folder Proyek](#-struktur-folder-proyek)
+- [✅ Prasyarat Sistem](#-prasyarat-sistem)
+- [🚀 Instalasi & Setup](#-instalasi--setup)
+- [⚙️ Konfigurasi (.env)](#️-konfigurasi-env)
+- [🎮 Cara Menjalankan Aplikasi](#-cara-menjalankan-aplikasi)
+- [📦 Cara Build Aplikasi Menjadi Executable (.exe)](#-cara-build-aplikasi-menjadi-executable-exe)
+- [🔍 Troubleshooting Umum](#-troubleshooting-umum)
+- [🔒 Keamanan & Lisensi](#-keamanan--lisensi)
 
 ---
 
 ## ✨ Fitur Utama
 
-| Fitur | Keterangan |
-|---|---|
-| 🎨 **Multi-resolusi** | Pilih resolusi download: `native`, `1K`, `2K`, atau `4K` |
-| 📋 **Batch prompts** | Proses ratusan prompt sekaligus dari `prompts.txt` |
-| 💾 **Resume otomatis** | Lanjut dari prompt terakhir jika bot dihentikan di tengah jalan |
-| 🔄 **Auto-retry** | Coba ulang otomatis hingga `MAX_RETRIES` kali per prompt |
-| 🛡️ **Anti-detection** | Sembunyikan tanda otomasi (webdriver, visibility API) |
-| 🪟 **Window restore** | Otomatis restore window saat minimized agar klik kanan berjalan |
-| 📸 **Screenshot debug** | Simpan screenshot otomatis saat error/timeout untuk inspeksi |
-| 📝 **Log harian** | Log lengkap tersimpan di folder `logs/` per tanggal |
-| 🔁 **Browser relaunch** | Relaunch browser otomatis jika context/page mati saat berjalan |
+### 1. Core Bot & Automasi (CLI & GUI)
+* 🎨 **Multi-resolusi**: Mendukung download gambar dengan resolusi `native` (~1024px), `1K` (1024px via menu), `2K` (~2048px via upscale server Google), dan `4K` (~4096px - membutuhkan akun Google One/Pro).
+* 🛡️ **Anti-detection**: Menyembunyikan parameter webdriver, men-spoof `visibilityState` agar tab tetap aktif meskipun di-background, dan menggerakkan mouse secara sintetik secara berkala.
+* 💾 **Resume Otomatis**: Melacak progress unduhan melalui `.progress.json` sehingga bot dapat melanjutkan pekerjaan yang tertunda jika dihentikan di tengah jalan.
+* 🔄 **Mekanisme Fallback Multi-metode**: Melakukan download melalui tiga lapis pengamanan: Direct Fetch intercept, Playwright `saveAs` download event, dan Network URL fallback.
+
+### 2. Panel Kontrol Electron GUI
+* 💻 **Desain Premium Glassmorphism**: Antarmuka bertema gelap modern dengan animasi mikro yang responsif dan tata letak sidebar yang dapat disesuaikan.
+* 📝 **Interactive Prompt Editor**:
+  * Menulis dan memformat ratusan prompt langsung di aplikasi.
+  * Fitur pencarian kata kunci (*Find*) dengan navigasi hasil pencarian (*Next / Previous match*).
+  * Auto-detection baris komentar (`#`) dan baris kosong.
+* 📊 **Dashboard & Queue**:
+  * Statistik real-time: Jumlah prompt selesai, total antrean, sisa proses, dan total gambar tersimpan.
+  * Progress Bar dinamis berbasis persentase.
+  * Preview visual status prompt yang sedang diproses.
+* 💻 **Konsol Aktivitas Terintegrasi**:
+  * Log real-time dari output proses bot.
+  * Filter kategori log: *All, Info, Success, Warning, Error, GUI*.
+  * Pencarian instan pada baris log.
+  * Tombol aksi cepat untuk menyalin (*Copy*) log atau mengekspor (*Export*) log ke file `.txt`.
+* 🖼️ **Galeri Gambar Canggih**:
+  * Tiga mode tampilan: **Grid** (tampilan kartu), **List** (tabel detail), dan **Gallery** (viewer besar dengan sidebar metadata).
+  * Zoom slider interaktif untuk menyesuaikan ukuran kartu gambar pada mode Grid.
+  * Fitur pencarian nama prompt dan pengurutan berkas (Berdasarkan tanggal modifikasi terbaru/terlama, nama A-Z, nama Z-A).
+  * **Metadata Inspector**: Sidebar yang menyajikan informasi detail berkas (ukuran, dimensi resolusi, tanggal pembuatan, tanggal modifikasi, dan salin path absolut gambar).
+  * **Manajemen Berkas Terintegrasi**: Buka gambar langsung di viewer default OS (*Open*), buka lokasi folder di File Explorer (*Reveal*), ganti nama file secara aman (*Rename*), serta hapus berkas (*Delete*) dengan memindahkannya ke folder `.trash`.
+  * **Trash & Restore**: Gambar yang dihapus dari galeri dapat dikembalikan seketika (*Restore*) tanpa kehilangan data.
+  * **Lightbox Preview**: Viewer gambar layar penuh dengan navigasi keyboard (panah kiri/kanan untuk slide, tombol Esc untuk menutup) dan akses cepat ke tindakan file.
 
 ---
 
-## 📁 Struktur Proyek
+## 🛠️ Teknologi Yang Digunakan
+
+| Komponen | Teknologi | Kegunaan |
+|---|---|---|
+| **Core Automation** | [Playwright](https://playwright.dev/) | Automasi dan navigasi browser Chromium |
+| **GUI Runtime** | [Electron](https://www.electronjs.org/) | Framework aplikasi desktop lintas platform |
+| **Interface Styling** | CSS Vanilla (Custom) & [Tailwind CSS v3](https://tailwindcss.com/) | Kerangka desain responsif dan styling visual UI |
+| **Image Processing** | [Sharp](https://sharp.pixelplumbing.com/) | Optimasi, pengenalan, dan pemrosesan gambar lokal |
+| **App Builder** | [Electron Builder](https://www.electron.build/) | Pengemasan aplikasi menjadi installer Windows (`.exe`) |
+| **Configuration** | [Dotenv](https://github.com/motdotla/dotenv) | Pengelolaan environment variables (`.env`) |
+
+---
+
+## 📁 Struktur Folder Proyek
 
 ```
 bot2/
-├── index.js              # Entry point utama — logika otomasi Playwright
-├── prompts.txt           # Daftar prompt yang akan di-generate (1 prompt/baris)
-├── .env                  # Konfigurasi environment (tidak di-commit ke Git)
-├── .env.example          # Contoh konfigurasi (salin ke .env)
-├── package.json          # Metadata proyek & dependensi
-├── .gitignore            # File/folder yang diabaikan Git
+├── index.js                  # Entry point utama untuk mode CLI (Playwright Core)
+├── prompts.txt               # File daftar prompt gambar (1 prompt per baris)
+├── .env                      # Konfigurasi variabel lingkungan lokal (sensitif, diabaikan Git)
+├── .env.example              # Template contoh konfigurasi .env
+├── package.json              # Metadata proyek, skrip NPM, dan daftar dependensi
+├── package-lock.json         # Lockfile dependensi Node.js
+├── electron-builder.yml      # Konfigurasi pembungkusan (build) installer Electron
+├── .gitignore                # Aturan pengabaian file Git
 │
-├── utils/
-│   ├── logger.js         # Modul logging ke konsol + file harian
-│   └── helpers.js        # Fungsi utilitas: randomDelay, withRetry, sanitizeFilename
+├── gui/                      # 📂 Folder Aplikasi Electron GUI
+│   ├── main.js               # Main process Electron (bootstrap window & IPC listeners)
+│   ├── preload.js            # Preload script (jembatan API IPC aman ke renderer)
+│   │
+│   ├── handlers/             # 📂 Handler Backend IPC (Main Process)
+│   │   ├── botHandlers.js    # Mengelola lifecycle proses bot (spawn, monitoring, kill)
+│   │   ├── fileHandlers.js   # Operasi manajemen file galeri (read, rename, delete, restore)
+│   │   └── windowHandlers.js # Kontrol jendela window (minimize, maximize, close, config file)
+│   │
+│   └── renderer/             # 📂 Frontend Aplikasi (Renderer Process)
+│       ├── index.html        # Struktur HTML utama panel kontrol
+│       ├── flow_bot_banner.png # Gambar banner aplikasi
+│       ├── icon.png          # Logo aplikasi
+│       ├── css/              # 📂 Modular CSS Stylesheets
+│       │   ├── base.css      # CSS Reset, variabel warna, font, dan keyframes animasi
+│       │   ├── layout.css    # Layout structural (titlebar, sidebar, main panel, tab-bar)
+│       │   ├── main.css      # Entrypoint CSS yang meng-import semua modul stylesheet
+│       │   └── components/   # Komponen visual (buttons, cards, logs, gallery, lightbox, modal)
+│       └── js/               # 📂 Modular Frontend Javascript
+│           ├── app.js        # Entrypoint frontend (menginisialisasi dan menghubungkan semua modul)
+│           └── modules/      # Modul logika (gallery, lightbox, progress, logs, sidebar, state, toast, dll.)
 │
-├── output/               # 📂 Hasil gambar tersimpan di sini (auto-created)
-│   └── .progress.json    # File tracking progress resume (auto-created)
+├── utils/                    # 📂 Folder Utilitas Bot Core
+│   ├── helpers.js            # Fungsi pembantu bot (retry, delay, pembersih nama berkas)
+│   └── logger.js             # Logger bot core untuk output konsol dan file harian
 │
-├── logs/                 # 📂 Log harian bot (auto-created)
-│   └── bot-YYYY-MM-DD.log
+├── output/                   # 📂 Folder Output Gambar (dibuat otomatis, diabaikan Git)
+│   ├── .trash/               # Folder penampung sementara gambar yang dihapus dari galeri
+│   └── .progress.json        # File pelacakan resume progress unduhan
 │
-├── browser_session/      # 📂 Sesi login browser (auto-created, tidak di-commit)
-└── tmp_downloads/        # 📂 Folder download sementara (auto-created & dibersihkan)
+├── logs/                     # 📂 Folder Log Bot Core (dibuat otomatis, diabaikan Git)
+│   └── bot-YYYY-MM-DD.log    # Berkas log plain-text harian
+│
+└── browser_session/          # 📂 Folder Profil Sesi Browser CLI (dibuat otomatis, diabaikan Git)
 ```
 
-> **Catatan:** Folder `output/`, `logs/`, `browser_session/`, dan `tmp_downloads/` dibuat otomatis saat bot pertama kali dijalankan dan **tidak perlu dibuat manual**.
+---
+
+## ✅ Prasyarat Sistem
+
+Sebelum menjalankan aplikasi, pastikan sistem Anda memenuhi prasyarat berikut:
+* **Node.js**: Versi **18 atau yang lebih baru** (Direkomendasikan versi LTS terbaru) -> [Download Node.js](https://nodejs.org/)
+* **Operating System**: Windows 10 / 11 (Diperlukan karena bot menggunakan perintah command prompt bawaan seperti `taskkill` untuk manajemen proses Chrome).
+* **Akun Google**: Akun Google yang aktif dengan akses ke Google Flow.
+* Koneksi internet stabil untuk proses upscale gambar server-side di Google Flow.
 
 ---
 
-## ✅ Prasyarat
+## 🚀 Instalasi & Setup
 
-- **Node.js** versi 18 atau lebih baru → [Download Node.js](https://nodejs.org/)
-- **Akun Google** yang sudah bisa mengakses [Google Flow](https://labs.google/fx/tools/flow)
-- **OS Windows** (bot menggunakan `taskkill` untuk manajemen Chrome)
-- Koneksi internet yang stabil
-
----
-
-## 🚀 Instalasi
-
-### 1. Clone repositori
-
+### 1. Clone Repository
+Buka terminal/CMD dan jalankan perintah:
 ```bash
 git clone https://github.com/insa21/bot-flow.git
 cd bot-flow
 ```
 
-### 2. Install dependensi Node.js
-
+### 2. Install Dependensi Proyek
+Install semua dependensi Node.js yang diperlukan:
 ```bash
 npm install
 ```
 
-### 3. Install browser Playwright
-
+### 3. Install Browser Playwright Chromium
+Playwright memerlukan instalasi browser Chromium internal agar automasi berjalan dengan andal:
 ```bash
 npx playwright install chromium
 ```
 
-### 4. Salin dan konfigurasi file environment
-
+### 4. Setup File Environment
+Salin berkas `.env.example` menjadi `.env` di root direktori proyek:
 ```bash
-# Salin template konfigurasi
 copy .env.example .env
 ```
-
-Kemudian edit file `.env` sesuai kebutuhan (lihat bagian [Konfigurasi](#-konfigurasi)).
+Buka file `.env` yang baru dibuat dan sesuaikan pengaturannya (lihat bagian [Konfigurasi](#-konfigurasi-env) di bawah).
 
 ---
 
-## ⚙️ Konfigurasi
+## ⚙️ Konfigurasi (.env)
 
-Semua konfigurasi diatur melalui file `.env` di root proyek:
+Berikut adalah pengaturan parameter di dalam file `.env`:
 
 ```env
 # ── Mode Browser ────────────────────────────────────────────────
-# false = browser terlihat (recommended untuk pertama kali / debug)
-# true  = headless (tidak ada jendela browser)
+# false = Browser terlihat (direkomendasikan untuk login awal & debug)
+# true  = Headless (berjalan di latar belakang tanpa jendela browser)
 HEADLESS=false
 
 # ── Folder Sesi Browser ─────────────────────────────────────────
-# Menyimpan cookie & login Google agar tidak perlu login setiap kali
+# Tempat menyimpan cookie dan sesi login Google agar tidak perlu login ulang
 USER_DATA_DIR=./browser_session
 
 # ── Timeout & Retry ─────────────────────────────────────────────
-# Maksimum waktu tunggu generate per prompt (milidetik)
+# Maksimal waktu tunggu generate gambar per prompt (dalam milidetik)
 TIMEOUT_MS=120000
 
-# Jumlah percobaan ulang jika generate/download gagal
+# Jumlah percobaan ulang jika generate atau unduhan gambar gagal
 MAX_RETRIES=3
 
-# Timeout menunggu context menu muncul setelah klik kanan (ms)
+# Timeout menunggu menu klik kanan muncul pada gambar (ms)
 CONTEXT_MENU_TIMEOUT_MS=15000
 
-# Timeout menunggu server Google upscale + kirim file ke browser (ms)
-# 2K biasanya butuh 30-120 detik. Default 5 menit sudah sangat cukup.
+# Timeout maksimal menunggu server Google melakukan upscale dan mengirim gambar (ms)
 DOWNLOAD_TIMEOUT_MS=300000
 
 # ── Resolusi Download ───────────────────────────────────────────
-# Pilihan: native | 1k | 2k | 4k
-IMAGE_SIZE=1k
+# Pilihan ukuran: native | 1k | 2k | 4k
+IMAGE_SIZE=2k
 ```
-
-### Penjelasan Parameter Penting
-
-| Parameter | Default | Keterangan |
-|---|---|---|
-| `HEADLESS` | `false` | `false` = browser terlihat; `true` = tidak ada jendela |
-| `USER_DATA_DIR` | `./browser_session` | Lokasi penyimpanan sesi login Google |
-| `TIMEOUT_MS` | `120000` | Timeout per prompt (2 menit). Naikkan jika koneksi lambat |
-| `MAX_RETRIES` | `3` | Jumlah retry per prompt sebelum dianggap gagal |
-| `CONTEXT_MENU_TIMEOUT_MS` | `15000` | Timeout menu klik kanan muncul |
-| `DOWNLOAD_TIMEOUT_MS` | `300000` | Timeout download file (5 menit) |
-| `IMAGE_SIZE` | `1k` | Resolusi gambar yang didownload |
 
 ---
 
-## 🎮 Cara Pakai
+## 🎮 Cara Menjalankan Aplikasi
 
-### Langkah 1 — Isi `prompts.txt`
+Aplikasi dapat dijalankan dalam dua mode operasional:
 
-Edit file `prompts.txt` dan masukkan prompt gambar, satu prompt per baris:
+### A. Mode Graphical User Interface (GUI) - Direkomendasikan
+Mode ini mempermudah pengelolaan antrean, monitoring log secara visual, dan manajemen file gambar yang diunduh.
 
+#### 1. Mode Development (dengan Electron Live)
+Untuk menjalankan aplikasi GUI dalam lingkungan pengembangan:
+```bash
+npm run gui
 ```
-Coffee shop branding identity collection.
-Technology company branding collection.
-Luxury business card branding collection.
-```
+*Tips: Tekan tombol **F12** pada keyboard untuk membuka Electron DevTools jika ingin melakukan inspeksi elemen UI.*
 
-- Baris yang diawali `#` akan diabaikan (komentar)
-- Baris kosong otomatis dilewati
+#### 2. Mode Production
+Jalankan file `.exe` hasil kompilasi yang ada di dalam folder `dist/` setelah Anda melakukan build aplikasi.
 
-### Langkah 2 — Jalankan Bot
+#### Alur Login Pertama Kali di GUI:
+1. Klik tombol **Start Bot** di panel kiri bawah GUI.
+2. Jendela browser otomatis terbuka.
+3. Masukkan kredensial akun Google Anda di browser tersebut untuk login.
+4. Setelah login berhasil dan masuk ke halaman Google Flow, bot akan mendeteksi otomatis dan mulai bekerja.
+5. Sesi login tersimpan dengan aman secara lokal, sehingga pada eksekusi berikutnya Anda tidak perlu login ulang.
 
+---
+
+### B. Mode Command Line Interface (CLI)
+Mode ini sangat cocok untuk eksekusi cepat langsung melalui terminal tanpa membuka jendela aplikasi Electron.
+
+#### 1. Isi Prompt
+Edit file `prompts.txt` di root proyek dan tuliskan prompt Anda (satu prompt per baris). Baris yang diawali dengan tanda `#` dianggap sebagai komentar dan dilewati.
+
+#### 2. Jalankan Bot
+Eksekusi perintah berikut di terminal:
 ```bash
 npm start
 ```
-
-atau langsung:
-
+Atau alternatifnya:
 ```bash
 node index.js
 ```
 
-### Langkah 3 — Login Google (Pertama Kali)
+---
 
-Saat pertama kali dijalankan, browser akan terbuka dan menampilkan halaman Google Flow. Jika belum login:
+## 📦 Cara Build Aplikasi Menjadi Executable (.exe)
 
-1. Login ke akun Google Anda di jendela browser yang terbuka
-2. Bot akan otomatis mendeteksi setelah login dan melanjutkan
-3. Sesi login disimpan di `browser_session/` — **login hanya diperlukan sekali**
+Anda dapat mengemas seluruh kode aplikasi GUI menjadi file setup executable (`.exe`) mandiri yang dapat diinstal di komputer Windows lain tanpa memerlukan dependensi Node.js eksternal.
 
-### Langkah 4 — Tunggu hingga Selesai
-
-Bot akan memproses setiap prompt secara berurutan. Progress ditampilkan di konsol:
-
+Jalankan perintah berikut:
+```bash
+npm run build:gui
 ```
-[2026-06-13 18:00:01] ℹ️ [1/77] "Coffee shop branding identity collection."
-[2026-06-13 18:00:03] ℹ️   Generate dimulai...
-[2026-06-13 18:00:45] ℹ️   📸 Gambar 1 terdeteksi via network!
-[2026-06-13 18:00:47] ℹ️   🖱️  Klik kanan pada gambar...
-[2026-06-13 18:00:49] ✅   Download selesai via direct fetch (1K): coffee_shop_...png
-[2026-06-13 18:00:49] ✅   1 gambar didownload.
-```
+
+Proses kompilasi akan berjalan menggunakan `electron-builder` dan hasilnya akan disimpan di dalam folder baru bernama `dist/`:
+* File utama: `dist/Flow Bot Setup 1.0.0.exe` (Installer aplikasi).
+* Konfigurasi installer mendukung pemilihan folder instalasi kustom oleh user (*installation directory chooser*).
 
 ---
 
-## 📝 Format prompts.txt
+## 🔍 Troubleshooting Umum
 
-```text
-# Ini adalah komentar, akan diabaikan
+### ❓ Jendela browser tertutup atau crash dengan kode kesalahan
+* **Penyebab**: Terjadi konflik dengan instance Chrome lain atau RAM sistem penuh.
+* **Solusi**: Tutup semua proses Chrome yang berjalan di latar belakang dengan menjalankan perintah berikut di Command Prompt (Administrator):
+  ```cmd
+  taskkill /F /IM chrome.exe
+  ```
+  Jika masalah berlanjut, Anda dapat menghapus folder sesi lokal `browser_session/` atau `browser_session_gui/` untuk merestart sesi dari awal.
 
-Educational content social media showcase.
-Podcast promotion social media collection.
-Event marketing social media layouts.
+### ❓ Bot macet pada tulisan "Menunggu halaman Flow siap..."
+* **Penyebab**: Sesi login Google kedaluwarsa atau memerlukan verifikasi keamanan tambahan (seperti 2FA).
+* **Solusi**: Pastikan opsi `HEADLESS=false` diatur di `.env` (atau matikan toggle headless di GUI), lalu lakukan proses login/verifikasi 2FA secara manual pada jendela browser Chromium yang muncul.
 
-# Kelompok berikutnya
-Coffee shop branding identity collection.
-Technology company branding collection.
-```
+### ❓ Gambar gagal didownload dengan resolusi 2K atau 4K
+* **Penyebab**: Server Google memerlukan waktu lebih lama untuk melakukan upscale gambar sebelum mengirimkannya ke browser.
+* **Solusi**: Naikkan durasi batas waktu download di file `.env` atau melalui sidebar pengaturan GUI:
+  ```env
+  DOWNLOAD_TIMEOUT_MS=600000   # Naikkan menjadi 10 menit
+  CONTEXT_MENU_TIMEOUT_MS=25000 # Naikkan waktu tunggu klik kanan menjadi 25 detik
+  ```
 
-**Tips prompt:**
-- Tulis dalam bahasa Inggris untuk hasil optimal di Google Flow
-- Prompt deskriptif menghasilkan gambar lebih konsisten
-- Setiap baris = 1 prompt = 1 sesi generate di Flow
-
----
-
-## 🖼️ Resolusi Download
-
-Atur `IMAGE_SIZE` di `.env`:
-
-| Nilai | Resolusi | Keterangan |
-|---|---|---|
-| `native` | ~1024px | Download gambar asli langsung tanpa menu |
-| `1k` | 1024px | Download via menu → opsi "1K / Ukuran asli" |
-| `2k` | ~2048px | Download via menu → opsi "2K" (upscale server Google) |
-| `4k` | ~4096px | Download via menu → opsi "4K" (perlu akun Google One/Pro) |
-
-> **Catatan:** Resolusi `2K` dan `4K` di-upscale langsung oleh server Google Flow — bukan resize lokal — sehingga kualitas lebih baik dari upscale manual.
+### ❓ Tombol Galeri tidak memuat gambar yang baru saja di-download
+* **Penyebab**: Folder output gambar berbeda dengan folder pemantauan aktif galeri.
+* **Solusi**: Periksa sidebar pengaturan GUI pada bagian **Output Folder**. Pastikan path menunjuk ke folder yang sesuai (misalnya `./output`). Anda juga dapat mengklik tombol **Open in Explorer** untuk memverifikasi secara langsung keberadaan berkas gambar tersebut.
 
 ---
 
-## 🔧 Cara Kerja
+## 🔒 Keamanan & Lisensi
 
-### Alur Otomasi
-
-```
-prompts.txt
-    │
-    ▼
-[Launch Browser] → Login Google (pertama kali saja)
-    │
-    ▼
-[Untuk setiap prompt:]
-    │
-    ├─ 1. Ketik prompt ke input box Flow
-    ├─ 2. Tekan Enter → tunggu generate selesai
-    ├─ 3. Deteksi gambar baru via network response
-    ├─ 4. Klik kanan gambar → hover "Download" → klik resolusi target
-    ├─ 5. Intercept URL download → fetch & simpan ke output/
-    └─ 6. Simpan progress → lanjut ke prompt berikutnya
-```
-
-### Mekanisme Download (Berlapis)
-
-Bot menggunakan 3 metode download secara bertahap (fallback):
-
-1. **Direct Fetch** — Intercept URL dari `requestfinished` event, lalu fetch langsung tanpa dialog
-2. **Playwright saveAs** — Gunakan Playwright download event + `download.saveAs()` sebagai backup
-3. **Network URL Fallback** — Fetch dari URL gambar yang terdeteksi via network response
-
-### Anti-Detection
-
-- Sembunyikan property `navigator.webdriver`
-- Spoof `document.visibilityState` → selalu `'visible'`
-- Blokir event `visibilitychange` agar Flow tidak throttle saat tab di-background
-- Keep-alive setiap 20 detik: `bringToFront()` + gerakan mouse sintetis
-- CDP: nonaktifkan background throttling
-
-### Resume Otomatis
-
-Progress disimpan di `output/.progress.json`. Jika bot dihentikan (Ctrl+C, crash, dsb), jalankan ulang `npm start` dan bot akan **melanjutkan dari prompt yang belum selesai**.
-
----
-
-## 📊 Log & Debugging
-
-### Log Konsol (Real-time)
-
-Semua aktivitas ditampilkan langsung di terminal dengan emoji dan timestamp.
-
-### Log File Harian
-
-Log tersimpan di `logs/bot-YYYY-MM-DD.log` dalam format plain text yang mudah dibaca:
-
-```
-[2026-06-13 18:00:01] [INFO   ] Meluncurkan browser...
-[2026-06-13 18:00:05] [INFO   ] Membuka https://labs.google/fx/tools/flow ...
-[2026-06-13 18:00:45] [SUCCESS] Download selesai via direct fetch (1K): file.png
-[2026-06-13 18:01:20] [ERROR  ] Attempt 1 error: Timeout 120000ms exceeded
-```
-
-### Screenshot Debug
-
-Saat error atau timeout, bot otomatis menyimpan screenshot ke folder `output/`:
-- `_debug_no_menu_<timestamp>.png` — saat menu klik kanan tidak muncul
-- `_debug_no_resolution_<timestamp>.png` — saat opsi resolusi tidak ditemukan
-- `<prompt>_screenshot.png` — screenshot saat download gagal semua retry
-- `<prompt>_timeout.png` — screenshot saat generate timeout
-
----
-
-## 🔍 Troubleshooting
-
-### ❓ Bot stuck di "Menunggu halaman Flow siap..."
-
-**Penyebab:** Perlu login Google atau halaman Flow tidak terbuka  
-**Solusi:**
-1. Pastikan `HEADLESS=false` di `.env`
-2. Login manual di jendela browser yang terbuka
-3. Tunggu hingga halaman Flow termuat penuh
-
----
-
-### ❓ Download selalu gagal / file kosong
-
-**Penyebab:** Resolusi `2K`/`4K` membutuhkan waktu upscale lebih lama  
-**Solusi:**
-```env
-DOWNLOAD_TIMEOUT_MS=600000   # Naikkan ke 10 menit
-CONTEXT_MENU_TIMEOUT_MS=20000
-```
-
----
-
-### ❓ Error "Browser sudah direlaunch 5x"
-
-**Penyebab:** Browser crash berulang (RAM penuh, konflik Chrome)  
-**Solusi:**
-1. Tutup semua Chrome yang berjalan: `taskkill /F /IM chrome.exe`
-2. Hapus folder `browser_session/` jika korup
-3. Jalankan ulang bot
-
----
-
-### ❓ Prompt yang sudah selesai diproses ulang
-
-**Penyebab:** File `.progress.json` terhapus  
-**Solusi:** Progress direset otomatis setelah semua prompt selesai — ini adalah perilaku normal.
-
----
-
-### ❓ Gambar tidak terdeteksi meskipun Generate sudah selesai di UI
-
-**Penyebab:** Tab di-background terlalu lama, Flow throttle request  
-**Solusi:**
-```env
-HEADLESS=false   # Jangan gunakan headless
-TIMEOUT_MS=180000  # Naikkan timeout
-```
-
----
-
-## 📦 Struktur Output
-
-Gambar tersimpan di folder `output/` dengan format penamaan:
-
-```
-output/
-├── .progress.json                          ← tracking progress (auto)
-├── coffee_shop_branding_1718906401234_1k_1.png
-├── technology_company_brandin_1718906445678_1k_1.png
-└── luxury_business_card_brand_1718906489012_1k_1.png
-```
-
-**Format nama file:**
-```
-{nama_prompt_sanitasi}_{timestamp}_{resolusi}_{nomor}.png
-```
-
-Contoh: `coffee_shop_branding_1718906401234_1k_1.png`
-- `coffee_shop_branding` → 40 karakter pertama prompt (huruf/angka saja)
-- `1718906401234` → Unix timestamp milidetik
-- `1k` → resolusi download
-- `1` → nomor gambar (jika 1 prompt menghasilkan beberapa gambar)
-
----
-
-## 🛠️ Teknologi
-
-| Library | Versi | Kegunaan |
-|---|---|---|
-| [Playwright](https://playwright.dev/) | `^1.42.1` | Browser automation |
-| [dotenv](https://github.com/motdotla/dotenv) | `^16.4.5` | Manajemen environment variable |
-| [sharp](https://sharp.pixelplumbing.com/) | `^0.34.5` | Pemrosesan gambar |
-
----
-
-## 🔒 Keamanan
-
-- File `.env` **tidak di-commit** ke Git (sudah ada di `.gitignore`)
-- Folder `browser_session/` (berisi cookie & token login) juga **tidak di-commit**
-- Jangan bagikan file `.env` atau folder `browser_session/` ke orang lain
-
----
-
-## 📄 Lisensi
-
-Proyek ini untuk keperluan pribadi. Gunakan sesuai [Ketentuan Layanan Google](https://policies.google.com/terms).
+* **Keamanan Kredensial**: File `.env` dan folder `browser_session/` atau `browser_session_gui/` menyimpan informasi penting (seperti token akses & cookies akun Google). **JANGAN PERNAH** membagikan atau mem-push berkas/folder tersebut ke repository publik. Aturan ini telah dikonfigurasi secara ketat pada berkas `.gitignore`.
+* **Ketentuan Penggunaan**: Gunakan aplikasi otomasi ini secara bijak dan patuhi ketentuan layanan penggunaan layanan Google Labs.
+* **Lisensi**: Proyek ini dilisensikan untuk penggunaan personal dan pengembangan internal.
 
 ---
 
 <div align="center">
-  <sub>Made with ☕ — Google Flow Bot v1.0.0</sub>
+  <sub>Dibuat dengan ☕ — Flow Bot v1.0.0</sub>
 </div>

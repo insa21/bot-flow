@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: file:; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;" />
+    <title>Flow Bot — Control Panel</title>
+    <!-- Google Fonts: load via <link> agar bekerja di Electron -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+                    },
+                    colors: {
+                        accent:  '#00d2ff',
+                        accent2: '#7b2ff7',
+                        'bg-app':    '#080a10',
+                        'bg-panel':  '#0c0f1a',
+                        'bg-card':   '#111420',
+                        'bg-card-hover': '#161926',
+                        'bg-input':  '#0a0c14',
+                        'text-d':    '#dde4f0',
+                        'text-dim':  '#8896aa',
+                        'text-muted':'#4a5568',
+                    },
+                    borderColor: {
+                        subtle: 'rgba(255,255,255,0.055)',
+                        md:     'rgba(255,255,255,0.10)',
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Custom CSS: animasi, keyframes, compound selectors -->
+    <link rel="stylesheet" href="css/main.css" />
+</head>
+
+<body class="app-body">
+
+    <!-- ═══════════════════════  TITLEBAR  ═══════════════════════ -->
+    <div id="titlebar">
+
+        <!-- Sidebar toggle -->
+        <button id="btn-sidebar-toggle" class="titlebar-btn" title="Toggle Sidebar">
+            <svg id="icon-sidebar-open" viewBox="0 0 16 16" fill="none" width="14" height="14">
+                <rect x="1.5" y="2" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M6 2v12" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M9 6l2 2-2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg id="icon-sidebar-closed" viewBox="0 0 16 16" fill="none" width="14" height="14" class="hidden">
+                <rect x="1.5" y="2" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M6 2v12" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M4 6l-2 2 2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </button>
+
+        <!-- App identity -->
+        <div id="titlebar-drag">
+            <svg class="titlebar-logo" viewBox="0 0 20 20" fill="none">
+                <path d="M11 2L4 11h7l-2 7 9-10h-7l2-8z" fill="url(#bolt2)" />
+                <defs>
+                    <linearGradient id="bolt2" x1="4" y1="2" x2="13" y2="18" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#00d2ff" /><stop offset="1" stop-color="#7b2ff7" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <span class="titlebar-appname grad-text">Flow Bot</span>
+            <span class="titlebar-version">v1.0</span>
+        </div>
+
+        <!-- Spacer -->
+        <div id="titlebar-spacer"></div>
+
+        <!-- Window controls -->
+        <div id="titlebar-controls" class="group/controls">
+            <button id="btn-minimize" class="titlebar-btn" title="Minimize">
+                <svg viewBox="0 0 8 8" width="6" height="6" class="titlebar-icon opacity-0 group-hover/controls:opacity-100 transition-opacity duration-150 text-[#975700]">
+                    <line x1="1" y1="4" x2="7" y2="4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+            </button>
+            <button id="btn-maximize" class="titlebar-btn" title="Maximize">
+                <svg viewBox="0 0 8 8" width="6" height="6" class="titlebar-icon opacity-0 group-hover/controls:opacity-100 transition-opacity duration-150 text-[#006500]">
+                    <path d="M1.5 6.5h3m-3 0v-3m5-2h-3m3 0v3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+            <button id="btn-close" class="titlebar-btn titlebar-close" title="Close">
+                <svg viewBox="0 0 8 8" width="6" height="6" class="titlebar-icon opacity-0 group-hover/controls:opacity-100 transition-opacity duration-150 text-[#4c0002]">
+                    <line x1="2" y1="2" x2="6" y2="6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                    <line x1="6" y1="2" x2="2" y2="6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════  LAYOUT  ═══════════════════════ -->
+    <div id="layout">
+
+        <!-- ─────────────  LEFT SIDEBAR  ───────────── -->
+        <aside id="sidebar">
+
+            <!-- Status Card -->
+            <div id="status-bar" class="status-card">
+                <div class="status-card-glow"></div>
+                <div class="status-card-inner">
+                    <div class="status-dot-wrap">
+                        <span id="status-dot" class="idle"></span>
+                        <span class="pulse-ring hidden"></span>
+                    </div>
+                    <div class="status-text">
+                        <div class="status-eyebrow">Bot Status</div>
+                        <div id="status-label" class="s-idle">Idle</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Sections -->
+            <div id="sidebar-sections">
+
+                <!-- Resolution -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                                <path d="M9 9h6v6H9z" fill="currentColor" fill-opacity="0.15" />
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Image Resolution</h2>
+                    </div>
+                    <div id="resolution-group">
+                        <label class="res-option" data-val="native">
+                            <input type="radio" name="resolution" value="native" class="hidden" />
+                            <span class="res-radio-dot"></span>
+                            <div class="res-option-text">
+                                <span class="res-label">Native</span>
+                                <span class="res-sub">Original size, fastest</span>
+                            </div>
+                        </label>
+                        <label class="res-option" data-val="1k">
+                            <input type="radio" name="resolution" value="1k" class="hidden" />
+                            <span class="res-radio-dot"></span>
+                            <div class="res-option-text">
+                                <span class="res-label">1K</span>
+                                <span class="res-sub">1024 px via menu</span>
+                            </div>
+                        </label>
+                        <label class="res-option selected" data-val="2k">
+                            <input type="radio" name="resolution" value="2k" checked class="hidden" />
+                            <span class="res-radio-dot"></span>
+                            <div class="res-option-text">
+                                <span class="res-label res-label-with-badge">
+                                    2K
+                                    <span class="badge-recommended">Recommended</span>
+                                </span>
+                                <span class="res-sub">Server-side upscale</span>
+                            </div>
+                        </label>
+                        <label class="res-option" data-val="4k">
+                            <input type="radio" name="resolution" value="4k" class="hidden" />
+                            <span class="res-radio-dot"></span>
+                            <div class="res-option-text">
+                                <span class="res-label res-label-with-badge">
+                                    4K
+                                    <span class="badge-pro">Pro</span>
+                                </span>
+                                <span class="res-sub">Requires Google One / Pro</span>
+                            </div>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Output Folder -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                <path d="M12 11v6M9 14l3 3 3-3" stroke-width="1.8" />
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Output Folder</h2>
+                    </div>
+                    <div class="folder-row">
+                        <div id="output-path-display" class="path-display" title="Click to change">output/</div>
+                        <button id="btn-choose-folder" class="icon-btn" title="Browse folder">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                <line x1="12" y1="11" x2="12" y2="17" stroke-width="2" />
+                                <line x1="9" y1="14" x2="15" y2="14" stroke-width="2" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button id="btn-open-folder" class="link-btn">
+                        <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                        </svg>
+                        Open in Explorer
+                    </button>
+                </section>
+
+                <!-- Browser Mode -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="16" rx="2" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                                <circle cx="6" cy="7" r="1" fill="currentColor" />
+                                <circle cx="9" cy="7" r="1" fill="currentColor" />
+                                <circle cx="12" cy="7" r="1" fill="currentColor" />
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Browser Mode</h2>
+                    </div>
+                    <div class="toggle-row">
+                        <label class="toggle-label" for="headless-toggle">Headless (no window)</label>
+                        <label class="toggle-wrap">
+                            <input type="checkbox" id="headless-toggle" class="hidden" />
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Timing & Retry -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                                <path d="M12 2a10 10 0 0 0-8.5 4.5" />
+                                <polyline points="3 2 3 7 8 7" />
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Timing &amp; Retry</h2>
+                    </div>
+                    <div class="field-group">
+                        <div>
+                            <label class="field-label" for="input-timeout">Generate Timeout (ms)</label>
+                            <input type="number" id="input-timeout" value="120000" min="10000" step="10000" class="field-input" />
+                        </div>
+                        <div>
+                            <label class="field-label" for="input-retries">Max Retries</label>
+                            <input type="number" id="input-retries" value="3" min="1" max="10" class="field-input" />
+                        </div>
+                        <div>
+                            <label class="field-label" for="input-dl-timeout">Download Timeout (ms)</label>
+                            <input type="number" id="input-dl-timeout" value="300000" min="30000" step="30000" class="field-input" />
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Run Options -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="4" y1="21" x2="4" y2="14" />
+                                <line x1="4" y1="10" x2="4" y2="3" />
+                                <line x1="12" y1="21" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12" y2="3" />
+                                <line x1="20" y1="21" x2="20" y2="16" />
+                                <line x1="20" y1="12" x2="20" y2="3" />
+                                <line x1="2" y1="14" x2="6" y2="14" />
+                                <line x1="10" y1="8" x2="14" y2="8" />
+                                <line x1="18" y1="16" x2="22" y2="16" />
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Run Options</h2>
+                    </div>
+                    <div class="toggle-row">
+                        <label class="toggle-label" for="resume-toggle">Resume from last stop</label>
+                        <label class="toggle-wrap">
+                            <input type="checkbox" id="resume-toggle" class="hidden" />
+                            <span class="toggle-track"></span>
+                        </label>
+                    </div>
+                </section>
+
+            </div><!-- end sidebar-sections -->
+
+            <!-- Action Buttons -->
+            <div id="action-btns">
+                <button id="btn-start" class="btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
+                    </svg>
+                    <span class="btn-label">Start Bot</span>
+                </button>
+                <button id="btn-stop" disabled class="btn-stop">
+                    <svg viewBox="0 0 24 24" fill="none" width="12" height="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" />
+                    </svg>
+                    Stop
+                </button>
+            </div>
+
+        </aside>
+
+        <!-- Sidebar Resizer drag handle -->
+        <div id="sidebar-resizer"></div>
+
+        <!-- ─────────────  MAIN AREA  ───────────── -->
+        <main id="main-area">
+
+            <!-- Tab Bar -->
+            <div id="tab-bar">
+                <button class="tab active" data-tab="prompts">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        <line x1="8" y1="9" x2="16" y2="9" />
+                        <line x1="8" y1="13" x2="14" y2="13" />
+                    </svg>
+                    <span class="tab-text">Prompts</span>
+                </button>
+                <button class="tab" data-tab="progress">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                    <span class="tab-text">Dashboard</span>
+                    <span class="tab-badge-dot hidden" id="dashboard-active-dot"></span>
+                </button>
+                <button class="tab" data-tab="log">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 17 10 11 4 5" />
+                        <line x1="12" y1="19" x2="20" y2="19" />
+                    </svg>
+                    <span class="tab-text">Activity Log</span>
+                </button>
+                <button class="tab" data-tab="gallery">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="14" height="14" rx="2" />
+                        <path d="M21 7v10a4 4 0 0 1-4 4H7" />
+                        <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+                        <path d="M3 13l3.5-3.5a1 1 0 0 1 1.4 0L12 13M9 11l2.5-2.5a1 1 0 0 1 1.4 0L17 13" />
+                    </svg>
+                    <span class="tab-text">Gallery</span>
+                </button>
+            </div>
+
+            <!-- ══════════  PROMPTS TAB  ══════════ -->
+            <div id="tab-prompts" class="tab-content active">
+                <div class="tab-toolbar">
+                    <div class="flex gap-2">
+                        <span class="badge-count badge-active" title="Active prompts to generate">
+                            <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span id="prompt-count-active">0</span> active
+                        </span>
+                        <span class="badge-count badge-skipped" title="Skipped comments/prompts">
+                            <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            <span id="prompt-count-skipped">0</span> skipped
+                        </span>
+                        <span id="prompt-count" class="hidden">0</span>
+                    </div>
+                    <div class="toolbar-group">
+                        <div class="prompt-search-wrap">
+                            <input type="text" id="prompt-search-input" placeholder="Find..." class="prompt-search-input" />
+                            <span class="prompt-search-icon">
+                                <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </span>
+                            <div class="search-nav-btns hidden" id="prompt-search-nav">
+                                <button id="btn-prompt-search-prev" class="search-nav-btn" title="Previous match">▲</button>
+                                <button id="btn-prompt-search-next" class="search-nav-btn" title="Next match">▼</button>
+                                <span id="prompt-search-index" class="search-index-label">0/0</span>
+                            </div>
+                        </div>
+                        <button id="btn-upload-prompts" class="toolbar-btn">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                            </svg>
+                            <span>Import Prompts</span>
+                        </button>
+                        <button id="btn-clear-prompts" class="toolbar-btn toolbar-btn-danger">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+                </div>
+                <p class="prompts-hint">
+                    Enter one prompt per line. Lines starting with
+                    <code class="inline-code">#</code>
+                    are treated as comments.
+                </p>
+                <div class="prompts-editor-container" id="prompts-editor-container">
+                    <div id="prompts-highlight" class="prompts-highlight"></div>
+                    <textarea id="prompts-textarea"
+                        spellcheck="false"
+                        placeholder="Educational content social media showcase.&#10;Podcast promotion social media collection.&#10;# This is a comment — ignored by bot"></textarea>
+                </div>
+            </div>
+
+            <!-- ══════════  DASHBOARD / PROGRESS TAB  ══════════ -->
+            <div id="tab-progress" class="tab-content">
+
+                <!-- Stat Cards -->
+                <div id="stat-grid">
+                    <div class="stat-card green">
+                        <div class="top-bar"></div>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                        </div>
+                        <span id="stat-completed" class="stat-value">0</span>
+                        <span class="stat-label">Completed</span>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="top-bar"></div>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="8" y1="6" x2="21" y2="6" />
+                                <line x1="8" y1="12" x2="21" y2="12" />
+                                <line x1="8" y1="18" x2="21" y2="18" />
+                                <line x1="3" y1="6" x2="3.01" y2="6" stroke-width="3.5" />
+                                <line x1="3" y1="12" x2="3.01" y2="12" stroke-width="3.5" />
+                                <line x1="3" y1="18" x2="3.01" y2="18" stroke-width="3.5" />
+                            </svg>
+                        </div>
+                        <span id="stat-total" class="stat-value">0</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                    <div class="stat-card amber">
+                        <div class="top-bar"></div>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M5 2h14M5 22h14M19 2v4c0 4-3 7-7 7s-7-3-7-7V2M5 22v-4c0-4 3-7 7-7s7 3 7 7v4" />
+                            </svg>
+                        </div>
+                        <span id="stat-remaining" class="stat-value">0</span>
+                        <span class="stat-label">Remaining</span>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="top-bar"></div>
+                        <div class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                <polyline points="17 21 17 13 7 13 7 21" />
+                                <polyline points="7 3 7 8 15 8" />
+                            </svg>
+                        </div>
+                        <span id="stat-images" class="stat-value">0</span>
+                        <span class="stat-label">Saved</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <span class="progress-label">Overall Progress</span>
+                        <span id="progress-pct" class="progress-pct">0%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div id="progress-bar-fill" class="bar-fill"></div>
+                    </div>
+                    <div class="progress-footer">
+                        <span class="progress-sub">
+                            <span id="prog-completed-sub" class="progress-sub-val">0</span>
+                            of
+                            <span id="prog-total-sub" class="progress-sub-val">0</span>
+                            prompts done
+                        </span>
+                        <span id="prog-images-sub" class="progress-images-sub">0 images saved</span>
+                    </div>
+                </div>
+
+                <!-- Currently Processing -->
+                <div class="processing-box">
+                    <div class="processing-box-header">
+                        <span class="cpb-dot"></span>
+                        <span class="processing-eyebrow">Currently Processing</span>
+                    </div>
+                    <div id="current-prompt-text" class="current-prompt-text">Idle — Waiting to start...</div>
+                </div>
+
+                <!-- Queue -->
+                <div class="queue-header">
+                    <span class="queue-title">Queue</span>
+                    <span id="queue-badge" class="queue-badge">0 items</span>
+                </div>
+                <div id="prompt-queue-list" class="prompt-queue-list"></div>
+            </div>
+
+            <!-- ══════════  LOG TAB  ══════════ -->
+            <div id="tab-log" class="tab-content">
+                <div class="tab-toolbar">
+                    <span id="log-line-count" class="badge-count">
+                        <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6" />
+                            <line x1="8" y1="12" x2="21" y2="12" />
+                            <line x1="8" y1="18" x2="21" y2="18" />
+                            <line x1="3" y1="6" x2="3.01" y2="6" stroke-width="3.5" />
+                            <line x1="3" y1="12" x2="3.01" y2="12" stroke-width="3.5" />
+                            <line x1="3" y1="18" x2="3.01" y2="18" stroke-width="3.5" />
+                        </svg>
+                        0 lines
+                    </span>
+                    <div class="toolbar-group">
+                        <button id="btn-autoscroll" class="toolbar-btn toolbar-btn-active">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="5" y="2" width="14" height="20" rx="7" />
+                                <line x1="12" y1="6" x2="12" y2="10" stroke-width="2.5" />
+                            </svg>
+                            <span>Auto</span>
+                        </button>
+                        <button id="btn-clear-log" class="toolbar-btn toolbar-btn-danger">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                            <span>Clear</span>
+                        </button>
+                        <button id="btn-copy-log" class="toolbar-btn" title="Copy log to clipboard">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                            <span>Copy</span>
+                        </button>
+                        <button id="btn-export-log" class="toolbar-btn">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                            </svg>
+                            <span>Export</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Log Filters -->
+                <div class="log-filter-bar">
+                    <div id="log-filter-pills" class="filter-pills">
+                        <button class="filter-pill active" data-filter="all">All</button>
+                        <button class="filter-pill" data-filter="INFO">Info</button>
+                        <button class="filter-pill" data-filter="SUCCESS">Success</button>
+                        <button class="filter-pill" data-filter="WARN">Warning</button>
+                        <button class="filter-pill" data-filter="ERROR">Error</button>
+                        <button class="filter-pill" data-filter="GUI">GUI</button>
+                    </div>
+                    <div class="log-search-wrap">
+                        <input type="text" id="log-search-input" placeholder="Search logs..." class="field-input log-search-input" />
+                        <span class="log-search-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Console Stats Bar -->
+                <div id="log-stats-bar">
+                    <div class="log-stats-group">
+                        <div class="log-stat-item" title="Total Info Logs">
+                            <span class="log-stat-dot blue-dot"></span>
+                            <span class="log-stat-label">Info</span>
+                            <span id="log-stat-info" class="log-stat-val blue-val">0</span>
+                        </div>
+                        <div class="log-stat-item" title="Total Success Logs">
+                            <span class="log-stat-dot green-dot"></span>
+                            <span class="log-stat-label">Success</span>
+                            <span id="log-stat-success" class="log-stat-val green-val">0</span>
+                        </div>
+                        <div class="log-stat-item" title="Total Warning Logs">
+                            <span class="log-stat-dot amber-dot"></span>
+                            <span class="log-stat-label">Warning</span>
+                            <span id="log-stat-warn" class="log-stat-val amber-val">0</span>
+                        </div>
+                        <div class="log-stat-item" title="Total Error Logs">
+                            <span class="log-stat-dot red-dot"></span>
+                            <span class="log-stat-label">Error</span>
+                            <span id="log-stat-error" class="log-stat-val red-val">0</span>
+                        </div>
+                    </div>
+                    <div class="console-live-indicator">
+                        <span class="live-pulse"></span>
+                        <span>Console Live</span>
+                    </div>
+                </div>
+                <div id="log-panel">
+                    <div id="log-lines"></div>
+                    <div id="log-empty" class="log-empty-state">
+                        <div class="log-empty-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="48" height="48" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="4 17 10 11 4 5" />
+                                <line x1="12" y1="19" x2="20" y2="19" />
+                            </svg>
+                        </div>
+                        <div class="log-empty-text">
+                            <p class="log-empty-title">Console logs are empty</p>
+                            <p class="log-empty-sub">Start the bot to see execution outputs here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════  GALLERY TAB  ══════════ -->
+            <div id="tab-gallery" class="tab-content flex-col flex-1 overflow-hidden gap-3 p-3.5">
+                <!-- Gallery Header Toolbar -->
+                <div class="flex flex-wrap items-center justify-between flex-shrink-0 gap-x-3 gap-y-2 px-4 py-2 bg-[#0c0f1a] border border-white/5 rounded-lg backdrop-blur-md">
+                    <!-- Left: View Switcher and Zoom Slider -->
+                    <div class="flex items-center gap-4 flex-shrink-0">
+                        <div class="flex bg-white/5 border border-white/10 rounded-md p-0.5 h-7 items-center flex-shrink-0" role="group" aria-label="Gallery View Mode">
+                            <button id="btn-view-grid" class="view-segment-btn h-full w-8 rounded text-text-dim hover:text-text-d hover:bg-white/5 transition-all duration-150 active flex items-center justify-center flex-shrink-0" data-view="grid" title="Icon View">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                                </svg>
+                            </button>
+                            <button id="btn-view-list" class="view-segment-btn h-full w-8 rounded text-text-dim hover:text-text-d hover:bg-white/5 transition-all duration-150 flex items-center justify-center flex-shrink-0" data-view="list" title="List View">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                    <line x1="8" y1="6" x2="21" y2="6" />
+                                    <line x1="8" y1="12" x2="21" y2="12" />
+                                    <line x1="8" y1="18" x2="21" y2="18" />
+                                    <rect x="3" y="5" width="2" height="2" rx="0.5" />
+                                    <rect x="3" y="11" width="2" height="2" rx="0.5" />
+                                    <rect x="3" y="17" width="2" height="2" rx="0.5" />
+                                </svg>
+                            </button>
+                            <button id="btn-view-gallery" class="view-segment-btn h-full w-8 rounded text-text-dim hover:text-text-d hover:bg-white/5 transition-all duration-150 flex items-center justify-center flex-shrink-0" data-view="gallery" title="Gallery View">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                    <rect x="3" y="3" width="18" height="11" rx="1.5" />
+                                    <rect x="3" y="17" width="4" height="4" rx="0.5" />
+                                    <rect x="10" y="17" width="4" height="4" rx="0.5" />
+                                    <rect x="17" y="17" width="4" height="4" rx="0.5" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Zoom Slider (Only for Grid mode) -->
+                        <div id="gallery-zoom-container" class="flex items-center gap-2 transition-opacity duration-200 flex-shrink-0">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="11" height="11" class="text-text-muted flex-shrink-0">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            <input type="range" id="gallery-zoom-slider" min="90" max="320" value="180" class="w-20 h-0.5 bg-white/15 rounded-lg appearance-none cursor-pointer accent-white flex-shrink-0" title="Icon Size" />
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15" class="text-text-muted flex-shrink-0">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Middle: Search and stats -->
+                    <div class="flex items-center gap-3 flex-grow flex-shrink min-w-[140px] max-w-[240px]">
+                        <div class="relative flex-1 min-w-0">
+                            <input type="text" id="gallery-search-input" placeholder="Search..." class="w-full pl-8 pr-3 h-7 bg-[#0a0c14] border border-white/5 rounded-md text-text-d text-[11px] placeholder-text-muted focus:outline-none focus:border-accent/40 transition-colors" />
+                            <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted flex items-center justify-center">
+                                <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8" />
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg>
+                            </span>
+                        </div>
+                        <span id="gallery-count" class="text-xs text-text-muted font-sans font-medium whitespace-nowrap flex-shrink-0">0 images</span>
+                    </div>
+
+                    <!-- Right: Sort and Action buttons -->
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <select id="gallery-sort-select" title="Sort by" class="flex-shrink-0">
+                            <option value="newest">Date Modified (Newest)</option>
+                            <option value="oldest">Date Modified (Oldest)</option>
+                            <option value="name-asc">Name (A-Z)</option>
+                            <option value="name-desc">Name (Z-A)</option>
+                        </select>
+
+                        <button id="btn-gallery-info" class="h-7 w-7 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-text-dim hover:text-text-d hover:bg-white/10 transition-all cursor-pointer flex-shrink-0" title="Show/Hide Inspector (i)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                        </button>
+
+                        <div class="w-px h-5 bg-white/10 mx-1 flex-shrink-0"></div>
+
+                        <button id="btn-open-gallery-folder" class="h-7 w-7 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-text-dim hover:text-text-d hover:bg-white/10 transition-all cursor-pointer flex-shrink-0" title="Open output directory in File Explorer">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                <path d="M12 11v6M9 14l3 3 3-3" stroke-width="1.8" />
+                            </svg>
+                        </button>
+
+                        <button id="btn-refresh-gallery" class="h-7 w-7 flex items-center justify-center bg-white/5 border border-white/10 rounded-md text-text-dim hover:text-text-d hover:bg-white/10 transition-all cursor-pointer flex-shrink-0" title="Scan directory for new images">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                            </svg>
+                        </button>
+
+                        <button id="btn-toggle-trash" class="h-7 px-2.5 bg-white/5 border border-white/10 rounded-md text-text-dim hover:text-text-d hover:bg-white/10 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium flex-shrink-0 whitespace-nowrap" title="Show Trash Bin">
+                            <svg id="icon-trash-empty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" class="flex-shrink-0">
+                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                <line x1="10" y1="11" x2="10" y2="17" />
+                                <line x1="14" y1="11" x2="14" y2="17" />
+                            </svg>
+                            <svg id="icon-gallery-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" class="flex-shrink-0 hidden">
+                                <line x1="19" y1="12" x2="5" y2="12" />
+                                <polyline points="12 19 5 12 12 5" />
+                            </svg>
+                            <span id="text-trash-toggle">Trash Bin</span>
+                        </button>
+
+                        <button id="btn-empty-trash" class="h-7 px-2.5 bg-red-500/10 border border-red-500/20 rounded-md text-red-400 hover:bg-red-500/20 hover:border-red-500/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium flex-shrink-0 whitespace-nowrap hidden" title="Empty Trash Bin">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" class="flex-shrink-0">
+                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                <line x1="10" y1="11" x2="14" y2="15" />
+                                <line x1="14" y1="11" x2="10" y2="15" />
+                            </svg>
+                            <span>Empty Trash</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="gallery-empty" class="flex-1 flex flex-col items-center justify-center gap-4 text-text-muted p-10 text-center">
+                    <div class="opacity-15 text-text-dim animate-bounce">
+                        <svg viewBox="0 0 64 64" fill="none" width="60" height="60">
+                            <rect x="6" y="10" width="52" height="40" rx="7" stroke="currentColor" stroke-width="2.5" />
+                            <path d="M6 38l14-12 10 10 10-14 18 16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                            <circle cx="22" cy="22" r="4" stroke="currentColor" stroke-width="2.5" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-text-dim font-sans">No images found</p>
+                        <p class="text-xs text-text-muted mt-1 font-sans">Try refining your search or run the bot to generate images.</p>
+                    </div>
+                </div>
+
+                <!-- Main Layout splits content area and inspector -->
+                <div class="flex flex-1 min-h-0 overflow-hidden relative rounded-lg border border-white/5 bg-[#0c0f1a]">
+                    <!-- Left: Gallery Content Area (holds preview & grid/list) -->
+                    <div class="gallery-content-area flex flex-col flex-1 min-w-0 overflow-hidden relative">
+                        <!-- Upper Preview Pane (only shown in Gallery View Mode) -->
+                        <div id="gallery-preview-container" class="flex-1 bg-black/20 border-b border-white/5 flex flex-col overflow-hidden p-4 hidden">
+                            <div class="flex-1 flex items-center justify-center overflow-hidden relative group/preview w-full h-full">
+                                <img id="gallery-preview-img" class="max-w-full max-h-full object-contain rounded-md shadow-2xl border border-white/5 hidden" src="" alt="Gallery Preview" />
+                                
+                                <!-- Left Nav Button -->
+                                <button id="preview-nav-prev" class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 text-white flex items-center justify-center cursor-pointer transition-all duration-200 opacity-0 group-hover/preview:opacity-100 shadow-lg" title="Previous Image (Arrow Left)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+                                        <polyline points="15 18 9 12 15 6" />
+                                    </svg>
+                                </button>
+                                
+                                <!-- Right Nav Button -->
+                                <button id="preview-nav-next" class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 border border-white/10 text-white flex items-center justify-center cursor-pointer transition-all duration-200 opacity-0 group-hover/preview:opacity-100 shadow-lg" title="Next Image (Arrow Right)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+                                        <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="flex justify-center items-center pt-2.5 flex-shrink-0">
+                                <span id="gallery-preview-title" class="text-xs font-semibold text-text-d font-mono bg-white/5 border border-white/10 px-3 py-0.5 rounded-full max-w-[85%] truncate">No Image Selected</span>
+                            </div>
+                        </div>
+
+                        <!-- Grid/List/Strip Container -->
+                        <div id="gallery-grid-wrapper" class="flex flex-col flex-1 min-h-0 overflow-hidden relative">
+                            <!-- List View Header (Only shown in List Mode) -->
+                            <div id="gallery-list-header" class="flex items-center bg-white/[0.01] border-b border-white/10 px-4 py-2 text-[10px] font-bold text-text-dim uppercase tracking-wider flex-shrink-0 hidden">
+                                <div id="list-header-spacer" class="w-8 flex-shrink-0 transition-all duration-150"></div>
+                                <div class="px-2 py-0.5 overflow-hidden truncate flex-[2] min-w-[200px] sortable cursor-pointer hover:text-text-d flex items-center gap-1" data-sort="name">
+                                    <span>Name</span>
+                                    <span class="sort-direction"></span>
+                                </div>
+                                <div class="px-2 py-0.5 overflow-hidden truncate flex-[1.2] w-[140px] sortable cursor-pointer hover:text-text-d flex items-center gap-1" data-sort="date">
+                                    <span>Date Modified</span>
+                                    <span class="sort-direction"></span>
+                                </div>
+                                <div class="px-2 py-0.5 overflow-hidden truncate flex-[1] w-[110px]">Dimensions</div>
+                                <div class="px-2 py-0.5 overflow-hidden truncate flex-[0.8] w-[90px]">Size</div>
+                                <div class="px-2 py-0.5 overflow-hidden truncate flex-[0.8] w-[80px] text-right justify-end flex">Actions</div>
+                            </div>
+
+                            <div id="gallery-grid" class="flex-1 overflow-y-auto outline-none p-4 grid gap-3 align-content-start" tabindex="0"></div>
+
+                            <!-- Scroll to Top Button -->
+                            <button id="btn-gallery-scroll-top" class="hidden absolute bottom-4 right-4 w-9 h-9 bg-accent hover:bg-accent/80 text-black border-none rounded-full flex items-center justify-center transition-all duration-200 shadow-lg cursor-pointer z-30 opacity-85 hover:opacity-100 hover:scale-105" title="Scroll to Top">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14">
+                                    <polyline points="18 15 12 9 6 15" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Metadata Inspector Sidebar -->
+                    <div id="gallery-inspector" class="w-[280px] border-l border-white/10 bg-[#0c0f1a]/80 backdrop-blur-lg flex flex-col flex-shrink-0 overflow-y-auto hidden">
+                        <div class="flex flex-col items-center text-center p-5 border-b border-white/5">
+                            <div class="w-[85px] h-[85px] rounded-lg bg-black/20 border border-white/5 flex items-center justify-center mb-3 overflow-hidden relative">
+                                <img id="inspector-thumb" class="max-w-full max-h-full object-contain hidden" src="" alt="Mini preview" />
+                                <div id="inspector-thumb-placeholder" class="text-text-dim flex items-center justify-center">
+                                    <svg viewBox="0 0 24 24" fill="none" width="26" height="26" stroke="currentColor" stroke-width="1.8" class="opacity-25">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div id="inspector-filename" class="text-xs font-bold text-text-d font-mono break-all line-clamp-2 w-full">image.png</div>
+                            <div id="inspector-filekind" class="text-[9px] text-text-muted mt-1 uppercase tracking-wider font-bold">PNG image</div>
+                        </div>
+
+                        <div class="p-5 border-b border-white/5">
+                            <div class="text-[9px] font-bold uppercase text-text-muted mb-3 tracking-wider">Information</div>
+                            <div class="grid grid-cols-[75px_1fr] gap-x-3 gap-y-2.5 text-xs">
+                                <div class="text-text-dim text-right font-sans">Size</div>
+                                <div id="inspector-val-size" class="text-text-d font-sans">—</div>
+
+                                <div class="text-text-dim text-right font-sans">Dimensions</div>
+                                <div id="inspector-val-dimensions" class="text-text-d font-sans">—</div>
+
+                                <div class="text-text-dim text-right font-sans">Created</div>
+                                <div id="inspector-val-created" class="text-text-d font-sans">—</div>
+
+                                <div class="text-text-dim text-right font-sans">Modified</div>
+                                <div id="inspector-val-modified" class="text-text-d font-sans">—</div>
+
+                                <div class="text-text-dim text-right font-sans">Where</div>
+                                <div id="inspector-val-where" class="text-accent text-[10px] font-mono cursor-pointer underline break-all opacity-85 hover:opacity-100 transition-opacity" title="Click to copy path">—</div>
+                            </div>
+                        </div>
+
+                        <div class="p-5 flex flex-col gap-2 mt-auto border-t border-white/5">
+                            <button id="inspector-action-open" class="flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-md text-text-d py-1.5 text-xs font-sans hover:bg-white/10 transition-colors w-full cursor-pointer" title="Open image in default viewer">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                </svg>
+                                <span>Open</span>
+                            </button>
+                            <button id="inspector-action-reveal" class="flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-md text-text-d py-1.5 text-xs font-sans hover:bg-white/10 transition-colors w-full cursor-pointer" title="Show image in File Explorer">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                    <circle cx="12" cy="13" r="3" />
+                                </svg>
+                                <span>Reveal</span>
+                            </button>
+                            <button id="inspector-action-rename" class="flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-md text-text-d py-1.5 text-xs font-sans hover:bg-white/10 transition-colors w-full cursor-pointer" title="Rename image">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                                    <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                                <span>Rename</span>
+                            </button>
+                            <button id="inspector-action-restore" class="flex items-center justify-center gap-2 bg-emerald-600/20 border border-emerald-500/30 rounded-md text-emerald-400 py-1.5 text-xs font-sans hover:bg-emerald-500/25 transition-colors w-full cursor-pointer hidden" title="Restore image to gallery">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                                    <polyline points="23 4 23 10 17 10" />
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                                </svg>
+                                <span>Restore</span>
+                            </button>
+                            <button id="inspector-action-delete" class="flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-md text-red-400 hover:bg-red-500/15 hover:border-red-500/20 py-1.5 text-xs font-sans transition-colors w-full cursor-pointer" title="Delete image">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                                <span>Delete</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="hidden lightbox">
+        <div id="lightbox-backdrop" class="lightbox-backdrop"></div>
+
+        <!-- Lightbox Navigation -->
+        <button id="lightbox-prev" class="lightbox-nav-btn lightbox-prev" title="Previous Image (Arrow Left)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+                <polyline points="15 18 9 12 15 6" />
+            </svg>
+        </button>
+        <button id="lightbox-next" class="lightbox-nav-btn lightbox-next" title="Next Image (Arrow Right)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+                <polyline points="9 18 15 12 9 6" />
+            </svg>
+        </button>
+
+        <div id="lightbox-content" class="lightbox-content">
+            <div id="lightbox-img-wrap" class="lightbox-img-wrap">
+                <img id="lightbox-img" src="" alt="Preview" />
+            </div>
+            <div class="lightbox-meta">
+                <div id="lightbox-name" class="lightbox-name"></div>
+                <div id="lightbox-resolution" class="lightbox-resolution"></div>
+            </div>
+            <button id="lightbox-close" class="lightbox-close-btn">
+                <svg viewBox="0 0 10 10" fill="none" width="10" height="10">
+                    <line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    <line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+            </button>
+            <div class="lightbox-actions">
+                <button id="lightbox-open" class="lightbox-action-btn lightbox-action-open">
+                    <svg viewBox="0 0 12 12" fill="none" width="11" height="11">
+                        <path d="M2 10L10 2M10 2H6M10 2v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    Open in Viewer
+                </button>
+                <button id="lightbox-copy-path" class="lightbox-action-btn lightbox-action-copy">
+                    <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copy Path
+                </button>
+                <button id="lightbox-restore" class="lightbox-action-btn lightbox-action-restore bg-emerald-600/20 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 hidden">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="11" height="11">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                    </svg>
+                    Restore Image
+                </button>
+                <button id="lightbox-delete" class="lightbox-action-btn lightbox-action-delete">
+                    <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    Delete Image
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Rename Modal Dialog -->
+    <div id="rename-modal" class="hidden fixed inset-0 flex items-center justify-center z-[10000] bg-black/60 backdrop-blur-sm">
+        <div class="bg-[#1c2130] border border-white/10 rounded-lg shadow-2xl p-5 w-[350px] font-sans text-text-d animate-[fadeSlideIn_0.15s_ease-out]">
+            <h3 class="text-sm font-semibold mb-3">Rename Image</h3>
+            <p class="text-xs text-text-dim mb-4">Enter a new name for the selected image:</p>
+            <input type="text" id="rename-input" class="w-full px-3 py-1.5 bg-[#0a0c14] border border-white/10 rounded-md text-text-d text-xs placeholder-text-muted focus:outline-none focus:border-accent/40 mb-4" />
+            <div class="flex justify-end gap-2 text-xs font-medium">
+                <button id="btn-rename-cancel" class="px-4 py-1.5 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-colors cursor-pointer text-text-d">Cancel</button>
+                <button id="btn-rename-save" class="px-4 py-1.5 bg-[#007aff] hover:bg-[#007aff]/80 rounded-md text-white transition-colors cursor-pointer">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal Dialog -->
+    <div id="confirm-modal" class="hidden fixed inset-0 flex items-center justify-center z-[10005] bg-black/70 backdrop-blur-md">
+        <div class="bg-[#131722] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-6 w-[400px] max-w-[calc(100vw-32px)] font-sans text-text-d flex flex-col gap-4" id="confirm-modal-content">
+            
+            <!-- Icon & Title Header -->
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" id="confirm-modal-icon-wrapper">
+                    <!-- Icon will be injected here dynamically -->
+                </div>
+                <div class="flex-grow min-w-0">
+                    <h3 class="text-sm font-semibold text-text-d leading-6 truncate" id="confirm-modal-title">Confirm Action</h3>
+                    <p class="text-xs text-text-dim mt-1.5 leading-relaxed break-all" id="confirm-modal-message">Are you sure you want to perform this action?</p>
+                    <p class="text-[11px] text-text-muted mt-2 leading-relaxed italic break-all hidden" id="confirm-modal-details"></p>
+                </div>
+            </div>
+
+            <!-- "Don't show this again" option -->
+            <div class="flex items-center gap-2 px-1 py-1 mt-1 hidden" id="confirm-modal-pref-row">
+                <label class="flex items-center gap-2 cursor-pointer select-none text-[11px] text-text-dim hover:text-text-d transition-colors">
+                    <input type="checkbox" id="confirm-modal-checkbox" class="w-3.5 h-3.5 rounded bg-[#0a0c14] border border-white/10 text-[#007aff] focus:ring-0 focus:ring-offset-0 cursor-pointer" />
+                    <span>Don't ask me again</span>
+                </label>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div class="flex justify-end gap-2.5 text-xs font-semibold border-t border-white/5 pt-4 mt-2">
+                <button id="btn-confirm-cancel" class="px-6 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all active:scale-[0.98] cursor-pointer text-text-dim hover:text-text-d">Cancel</button>
+                <button id="btn-confirm-action" class="px-6 py-2 rounded-xl text-white transition-all active:scale-[0.98] cursor-pointer">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,18 @@
+appId: com.flowbot.gui
+productName: Flow Bot
+directories:
+  output: dist
+files:
+  - gui/**
+  - utils/**
+  - index.js
+  - package.json
+  - "!node_modules/**"
+  - "node_modules/dotenv/**"
+win:
+  target:
+    - nsis
+  icon: gui/renderer/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

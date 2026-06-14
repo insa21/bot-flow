@@ -1,0 +1,160 @@
+/* css/components/lightbox.css — Lightbox overlay, navigasi, zoom, dan tombol aksi */
+
+/* ══════════════  LIGHTBOX OVERLAY  ════════════════════════════ */
+.lightbox {
+    position:   fixed;
+    inset:      0;
+    z-index:    100;
+    display:    flex;
+    align-items: center;
+    justify-content: center;
+    animation:  fadeIn .15s ease;
+}
+.lightbox-backdrop {
+    position:   absolute;
+    inset:      0;
+    background: rgba(2, 3, 8, .93);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    cursor:     pointer;
+}
+
+/* ══════════════  LIGHTBOX CONTENT  ════════════════════════════ */
+.lightbox-content {
+    position:    relative;
+    z-index:     5;
+    max-width:   90vw;
+    max-height:  88vh;
+    display:     flex;
+    flex-direction: column;
+    align-items: center;
+    gap:         12px;
+}
+
+/* ── Image wrapper ───────────────────────────────────────────── */
+.lightbox-img-wrap {
+    position:   relative;
+    max-width:  100%;
+    max-height: 74vh;
+    overflow:   hidden;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 28px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.08);
+}
+.lightbox-img-wrap.zoomed { overflow: auto; cursor: grab; }
+.lightbox-img-wrap.zoomed:active { cursor: grabbing; }
+
+#lightbox-img {
+    display:    block;
+    max-width:  80vw;
+    max-height: 74vh;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+    cursor:     zoom-in;
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+}
+#lightbox-img.zoomed {
+    max-width:  none;
+    max-height: none;
+    width:      200%;
+    cursor:     zoom-out;
+}
+
+/* ── Meta ────────────────────────────────────────────────────── */
+.lightbox-meta {
+    text-align: center;
+    flex-shrink: 0;
+}
+.lightbox-name {
+    font-size:   12px;
+    color:       var(--color-text-dim);
+    font-family: var(--font-mono);
+    overflow:    hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width:   70vw;
+}
+.lightbox-resolution {
+    font-size:  11px;
+    color:      var(--color-text-muted);
+    margin-top: 2px;
+    font-family: var(--font-mono);
+}
+
+/* ── Close button ────────────────────────────────────────────── */
+.lightbox-close-btn {
+    position:        absolute;
+    top:             -16px;
+    right:           -16px;
+    width:           32px;
+    height:          32px;
+    background:      rgba(20,24,40,.9);
+    border:          1px solid rgba(255,255,255,.1);
+    border-radius:   50%;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    color:           var(--color-text-muted);
+    cursor:          pointer;
+    transition:      all .15s;
+    z-index:         10;
+}
+.lightbox-close-btn:hover { background: var(--color-red); color: #fff; border-color: var(--color-red); }
+
+/* ══════════════  NAVIGATION BUTTONS  ══════════════════════════ */
+.lightbox-nav-btn {
+    position:        absolute;
+    top:             50%;
+    z-index:         10;
+    width:           44px;
+    height:          44px;
+    background:      rgba(12,15,26,.85);
+    border:          1px solid rgba(255,255,255,.1);
+    border-radius:   50%;
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    color:           var(--color-text-dim);
+    cursor:          pointer;
+    transition:      all .2s ease;
+    transform:       translateY(-50%);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.lightbox-prev         { left:  -60px; }
+.lightbox-next         { right: -60px; }
+.lightbox-nav-btn:hover {
+    background:  var(--color-accent);
+    border-color: var(--color-accent);
+    color:       var(--color-bg);
+    box-shadow:  0 0 20px rgba(0,210,255,.4);
+}
+
+/* ══════════════  LIGHTBOX ACTION BUTTONS  ══════════════════════ */
+.lightbox-actions {
+    display:     flex;
+    gap:         8px;
+    flex-wrap:   wrap;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.lightbox-action-btn {
+    display:     inline-flex;
+    align-items: center;
+    gap:         6px;
+    padding:     6px 13px;
+    border-radius: 7px;
+    font-size:   11.5px;
+    font-weight: 500;
+    border:      1px solid rgba(255,255,255,.08);
+    background:  rgba(255,255,255,.04);
+    color:       var(--color-text-dim);
+    cursor:      pointer;
+    transition:  all .15s;
+}
+.lightbox-action-btn:hover        { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); color: var(--color-text-d); }
+.lightbox-action-open:hover       { background: rgba(0,210,255,.08) !important; border-color: rgba(0,210,255,.3) !important; color: var(--color-accent) !important; }
+.lightbox-action-copy:hover       { background: rgba(123,47,247,.08) !important; border-color: rgba(123,47,247,.3) !important; color: var(--color-accent2) !important; }
+.lightbox-action-delete:hover     { background: rgba(239,68,68,.08) !important; border-color: rgba(239,68,68,.3) !important; color: #fc8181 !important; }
+
+/* Dropdown container for gallery view */
+.dropdown-container { position: relative; display: flex; }

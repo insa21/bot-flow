@@ -1,0 +1,354 @@
+/* css/components/prompts.css — Prompts textarea tab dan toast notification */
+
+/* ══════════════  PROMPTS TEXTAREA & EDITOR  ═══════════════════ */
+.prompts-editor-container {
+    position:    relative;
+    flex:        1;
+    background:  #060810;
+    border:      1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow:    hidden;
+    box-shadow:  inset 0 2px 6px rgba(0, 0, 0, .4);
+    transition:  border-color .2s, box-shadow .2s;
+    min-height:  0;
+}
+.prompts-editor-container.focused {
+    border-color: rgba(0, 210, 255, .3);
+    box-shadow:   0 0 0 3px rgba(0, 210, 255, .05), inset 0 2px 6px rgba(0, 0, 0, .4);
+}
+#prompts-textarea, .prompts-highlight {
+    position:    absolute;
+    top:         0;
+    left:        0;
+    width:       100%;
+    height:      100%;
+    margin:      0;
+    padding:     14px 18px;
+    font-family: var(--font-mono);
+    font-size:   13px;
+    line-height: 2;
+    white-space: pre-wrap;
+    word-wrap:   break-word;
+    border:      none;
+    outline:     none;
+    background:  transparent;
+    box-sizing:  border-box;
+}
+#prompts-textarea {
+    color:       transparent;
+    caret-color: #c9d8f0;
+    z-index:     2;
+    resize:      none;
+    overflow-y:  scroll;
+}
+.prompts-highlight {
+    color:       #c9d8f0;
+    z-index:     1;
+    overflow-y:  scroll;
+    pointer-events: none;
+}
+.prompts-highlight::-webkit-scrollbar {
+    width: 4px;
+}
+.prompts-highlight::-webkit-scrollbar-thumb {
+    background: transparent !important;
+}
+.prompts-highlight::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+#prompts-textarea::placeholder { color: rgba(74, 85, 104, .5); }
+
+.prompts-comment-line {
+    color:           var(--color-text-muted);
+    text-decoration: line-through;
+    opacity:         0.7;
+}
+
+.prompts-duplicate-line {
+    background:      rgba(239, 68, 68, 0.12);
+    border-bottom:   1px dashed rgba(239, 68, 68, 0.6);
+    color:           #fecaca;
+    animation:       duplicate-pulse 2s infinite alternate;
+}
+
+@keyframes duplicate-pulse {
+    0% {
+        background-color: rgba(239, 68, 68, 0.06);
+    }
+    100% {
+        background-color: rgba(239, 68, 68, 0.16);
+    }
+}
+
+
+/* ══════════════  TOAST NOTIFICATION  ════════════════════════ */
+.toast-container {
+    position:        fixed;
+    bottom:          24px;
+    left:            50%;
+    transform:       translateX(-50%);
+    z-index:         200;
+    display:         flex;
+    flex-direction:  column;
+    align-items:     center;
+    gap:             8px;
+    width:           max-content;
+    max-width:       calc(100vw - 40px);
+}
+
+.toast-notification {
+    display:         flex;
+    align-items:     center;
+    gap:             12px;
+    background:      rgba(15, 19, 34, .95);
+    color:           var(--color-text-d);
+    border:          1px solid rgba(255, 255, 255, .08);
+    border-left:     4px solid transparent;
+    border-radius:   10px;
+    padding:         10px 14px 10px 18px;
+    font-size:       13px;
+    font-weight:     500;
+    width:           380px;
+    min-width:       min(320px, 100%);
+    max-width:       min(480px, calc(100vw - 40px));
+    box-shadow:      0 8px 32px rgba(0, 0, 0, .5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity:         0;
+    transform:       translateY(14px) scale(0.96);
+    transition:      opacity .24s cubic-bezier(.4, 0, .2, 1),
+                     transform .24s cubic-bezier(.4, 0, .2, 1),
+                     border-color .2s ease,
+                     border-left-color .2s ease,
+                     box-shadow .2s ease;
+    will-change:     opacity, transform;
+    box-sizing:      border-box;
+}
+.toast-notification.visible {
+    opacity:   1;
+    transform: translateY(0) scale(1);
+}
+.toast-notification.hide {
+    opacity:   0;
+    transform: translateY(-8px) scale(0.96);
+}
+
+/* ── Toast Types Styling ── */
+.toast-notification.success {
+    border-color: rgba(34, 197, 94, .25);
+    border-left-color: #22c55e;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .5), 0 0 14px rgba(34, 197, 94, .08);
+}
+.toast-notification.error {
+    border-color: rgba(239, 68, 68, .25);
+    border-left-color: #ef4444;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .5), 0 0 14px rgba(239, 68, 68, .08);
+}
+.toast-notification.warning {
+    border-color: rgba(245, 158, 11, .25);
+    border-left-color: #f59e0b;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .5), 0 0 14px rgba(245, 158, 11, .08);
+}
+.toast-notification.info {
+    border-color: rgba(59, 130, 246, .25);
+    border-left-color: #3b82f6;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .5), 0 0 14px rgba(59, 130, 246, .08);
+}
+
+.toast-message {
+    flex: 1;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+.toast-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.toast-action-btn {
+    background:  rgba(0, 210, 255, .1);
+    border:      1px solid rgba(0, 210, 255, .25);
+    color:       var(--color-accent);
+    font-size:   12px;
+    font-weight: 600;
+    padding:     3px 12px;
+    border-radius: 6px;
+    cursor:      pointer;
+    white-space: nowrap;
+    transition:  background .15s, border-color .15s;
+    flex-shrink: 0;
+}
+.toast-action-btn:hover {
+    background:   rgba(0, 210, 255, .18);
+    border-color: rgba(0, 210, 255, .45);
+}
+
+/* Action button coloring based on toast type */
+.toast-notification.success .toast-action-btn {
+    background: rgba(34, 197, 94, .1);
+    border-color: rgba(34, 197, 94, .25);
+    color: #4ade80;
+}
+.toast-notification.success .toast-action-btn:hover {
+    background: rgba(34, 197, 94, .18);
+    border-color: rgba(34, 197, 94, .45);
+}
+.toast-notification.error .toast-action-btn {
+    background: rgba(239, 68, 68, .1);
+    border-color: rgba(239, 68, 68, .25);
+    color: #f87171;
+}
+.toast-notification.error .toast-action-btn:hover {
+    background: rgba(239, 68, 68, .18);
+    border-color: rgba(239, 68, 68, .45);
+}
+.toast-notification.warning .toast-action-btn {
+    background: rgba(245, 158, 11, .1);
+    border-color: rgba(245, 158, 11, .25);
+    color: #fbbf24;
+}
+.toast-notification.warning .toast-action-btn:hover {
+    background: rgba(245, 158, 11, .18);
+    border-color: rgba(245, 158, 11, .45);
+}
+.toast-notification.info .toast-action-btn {
+    background: rgba(59, 130, 246, .1);
+    border-color: rgba(59, 130, 246, .25);
+    color: #60a5fa;
+}
+.toast-notification.info .toast-action-btn:hover {
+    background: rgba(59, 130, 246, .18);
+    border-color: rgba(59, 130, 246, .45);
+}
+
+/* Close button style */
+.toast-close-btn {
+    background:  transparent;
+    border:      none;
+    color:       var(--color-text-dim);
+    font-size:   16px;
+    font-weight: 400;
+    cursor:      pointer;
+    padding:     2px 6px;
+    line-height: 1;
+    display:     flex;
+    align-items: center;
+    justify-content: center;
+    opacity:     0.5;
+    transition:  opacity .15s, color .15s;
+    user-select: none;
+    flex-shrink: 0;
+}
+.toast-close-btn:hover {
+    opacity:     1;
+    color:       var(--color-text-d);
+}
+
+/* ══════════════  PROMPT SEARCH  ══════════════════════════════ */
+.prompt-search-wrap {
+    position:      relative;
+    display:       flex;
+    align-items:   center;
+    background:    rgba(6, 8, 16, 0.6);
+    border:        1px solid var(--color-border);
+    border-radius: 7px;
+    padding-right: 6px;
+    transition:    border-color .15s, box-shadow .15s;
+    height:        28px;
+}
+.prompt-search-wrap:focus-within {
+    border-color:  rgba(0, 210, 255, .3);
+    box-shadow:    0 0 8px rgba(0, 210, 255, 0.05);
+}
+.prompt-search-input {
+    background:    transparent;
+    border:        none;
+    outline:       none;
+    color:         var(--color-text-d);
+    font-size:     11px;
+    padding:       4px 4px 4px 24px;
+    width:         85px;
+    transition:    width .2s ease;
+    height:        100%;
+}
+.prompt-search-input:focus {
+    width:         150px;
+}
+.prompt-search-icon {
+    position:      absolute;
+    left:          8px;
+    top:           50%;
+    transform:     translateY(-50%);
+    color:         var(--color-text-muted);
+    pointer-events: none;
+    display:       flex;
+    align-items:   center;
+}
+.search-nav-btns {
+    display:       flex;
+    align-items:   center;
+    gap:           3px;
+    margin-left:   6px;
+    font-size:     10px;
+}
+.search-nav-btn {
+    background:    none;
+    border:        none;
+    color:         var(--color-text-dim);
+    cursor:        pointer;
+    padding:       2px 4px;
+    border-radius: 3px;
+    transition:    background .1s, color .1s;
+    font-size:     9px;
+    line-height:   1;
+}
+.search-nav-btn:hover {
+    background:    rgba(255, 255, 255, .08);
+    color:         var(--color-accent);
+}
+.search-index-label {
+    color:         var(--color-text-muted);
+    font-family:   var(--font-mono);
+    font-size:     9.5px;
+    margin-left:   3px;
+    user-select:   none;
+    white-space:   nowrap;
+}
+
+/* Match Highlights in Textarea Backdrop */
+.search-match {
+    background:    rgba(251, 191, 36, 0.35);
+    border-bottom: 1px solid rgba(251, 191, 36, 0.7);
+    color:         #ffffff;
+    border-radius: 2px;
+}
+.search-match.active-match {
+    background:    rgba(0, 210, 255, 0.45) !important;
+    border-bottom: 2px solid var(--color-accent) !important;
+    color:         #ffffff !important;
+    box-shadow:    0 0 8px var(--color-accent);
+    animation:     pulse-active-match 1.5s infinite alternate;
+    border-radius: 2px;
+}
+
+@keyframes pulse-active-match {
+    0% {
+        background-color: rgba(0, 210, 255, 0.3);
+        box-shadow: 0 0 4px rgba(0, 210, 255, 0.4);
+    }
+    100% {
+        background-color: rgba(0, 210, 255, 0.65);
+        box-shadow: 0 0 12px rgba(0, 210, 255, 0.9);
+    }
+}
+

@@ -1,0 +1,483 @@
+/* css/layout.css — Struktur halaman utama: titlebar, sidebar, main area, tabs */
+
+/* ══════════════  TITLEBAR  ══════════════════════════════════════ */
+#titlebar {
+    position:       relative;
+    display:        flex;
+    align-items:    center;
+    height:         var(--titlebar-height);
+    background:     var(--color-panel);
+    flex-shrink:    0;
+    padding:        0 12px;
+    z-index:        50;
+    gap:            8px;
+    -webkit-app-region: drag;
+}
+#titlebar::after {
+    content:    '';
+    position:   absolute;
+    bottom: 0; left: 0; right: 0;
+    height:     1px;
+    background: linear-gradient(90deg, transparent 0%, var(--color-accent) 30%, var(--color-accent2) 70%, transparent 100%);
+    opacity:    .3;
+    pointer-events: none;
+}
+
+/* Drag region */
+#titlebar-drag,
+#titlebar-spacer {
+    -webkit-app-region: drag;
+}
+#titlebar-spacer { flex: 1; min-width: 0; }
+
+#titlebar-drag {
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+    min-width:   0;
+}
+.titlebar-logo {
+    width:      17px;
+    height:     17px;
+    flex-shrink: 0;
+    filter:     drop-shadow(0 0 6px rgba(0, 210, 255, .7));
+}
+.titlebar-appname {
+    font-weight:    700;
+    font-size:      13px;
+    letter-spacing: 0.03em;
+    white-space:    nowrap;
+    overflow:       hidden;
+    text-overflow:  ellipsis;
+    font-family:    'Inter', system-ui, sans-serif;
+}
+.titlebar-version {
+    color:       var(--color-text-muted);
+    font-size:   10px;
+    font-weight: 400;
+    flex-shrink: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* No-drag zone */
+#btn-sidebar-toggle,
+#titlebar-controls,
+#titlebar-controls * {
+    -webkit-app-region: no-drag;
+}
+#titlebar-controls {
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+    flex-shrink: 0;
+}
+
+/* ══════════════  LAYOUT WRAPPER  ════════════════════════════════ */
+#layout {
+    display:  flex;
+    overflow: hidden;
+    height:   calc(100vh - var(--titlebar-height));
+}
+
+/* ══════════════  SIDEBAR  ═══════════════════════════════════════ */
+#sidebar {
+    width:      var(--sidebar-width);
+    flex-shrink: 0;
+    display:    flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: linear-gradient(180deg, var(--color-panel) 0%, rgba(12, 15, 26, .98) 100%);
+    border-right: 1px solid var(--color-border);
+    transition:
+        width .26s cubic-bezier(.4, 0, .2, 1),
+        opacity .22s ease;
+}
+#sidebar.collapsed {
+    width:          0 !important;
+    opacity:        0;
+    pointer-events: none;
+    border-right-width: 0;
+}
+#sidebar > *:not(#status-bar) {
+    min-width: var(--sidebar-width);
+}
+
+/* Sidebar sections scroll area */
+#sidebar-sections {
+    display:      flex;
+    flex-direction: column;
+    gap:          8px;
+    padding:      10px;
+    flex:         1;
+    min-height:   0;
+    overflow-y:   auto;
+}
+
+/* Action buttons at bottom */
+#action-btns {
+    display:        flex;
+    flex-direction: column;
+    gap:            8px;
+    padding:        10px;
+    flex-shrink:    0;
+}
+
+/* ══════════════  MAIN AREA  ═════════════════════════════════════ */
+#main-area {
+    flex:           1;
+    display:        flex;
+    flex-direction: column;
+    overflow:       hidden;
+    background:     var(--color-bg);
+    min-width:      0;
+}
+
+/* ══════════════  TAB BAR  ═══════════════════════════════════════ */
+#tab-bar {
+    display:         flex;
+    align-items:     flex-end;
+    padding:         8px 12px 0;
+    background:      var(--color-panel);
+    border-bottom:   1px solid var(--color-border);
+    gap:             2px;
+    flex-shrink:     0;
+    overflow-x:      auto;
+    overflow-y:      visible;
+    scrollbar-width: none;
+    z-index:         10;
+}
+#tab-bar::-webkit-scrollbar { display: none; }
+
+/* ══════════════  TAB CONTENT  ═══════════════════════════════════ */
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display:        flex;
+    flex-direction: column;
+    flex:           1;
+    overflow:       hidden;
+    padding:        14px;
+    gap:            10px;
+    animation:      fadeIn .18s ease;
+}
+
+/* Compact padding for narrow viewports */
+.tab-compact .tab-content.active {
+    padding: 10px;
+    gap:     8px;
+}
+
+/* ══════════════  GALLERY GRID WRAPPER  ══════════════════════════ */
+/* .gallery-grid didefinisikan di galleryGrid.css */
+.gallery-grid-wrap {
+    position: relative;
+    flex:     1;
+    overflow: hidden;
+    display:  flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* ══════════════  SIDEBAR SECTION SHARED ══════════════════════════ */
+.folder-row {
+    display:     flex;
+    gap:         6px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.field-group {
+    display:        flex;
+    flex-direction: column;
+    gap:            8px;
+}
+
+.toggle-wrap {
+    display: flex;
+}
+
+.res-option-text {
+    display:        flex;
+    flex-direction: column;
+    gap:            2px;
+    min-width:      0;
+}
+
+.res-label-with-badge {
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+}
+
+/* ══════════════  TAB TOOLBAR SHARED  ════════════════════════════ */
+.tab-toolbar {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    flex-shrink:     0;
+    gap:             8px;
+}
+
+.toolbar-group {
+    display: flex;
+    gap:     6px;
+}
+
+/* ══════════════  GALLERY TOOLBAR  ═══════════════════════════════ */
+.gallery-toolbar {
+    display:         flex;
+    flex-wrap:       wrap;
+    align-items:     center;
+    justify-content: space-between;
+    gap:             12px;
+    padding:         12px;
+    background:      var(--color-card);
+    border:          1px solid var(--color-border);
+    border-radius:   var(--radius-lg);
+    flex-shrink:     0;
+}
+.gallery-toolbar-left {
+    display:     flex;
+    align-items: center;
+    gap:         12px;
+    flex-wrap:   wrap;
+    flex:        1;
+    min-width:   240px;
+}
+.gallery-toolbar-right {
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+    flex-wrap:   wrap;
+    flex-shrink: 0;
+}
+
+/* Gallery search */
+.gallery-search-wrap {
+    position:    relative;
+    display:     flex;
+    align-items: center;
+    flex:        1;
+    max-width:   280px;
+}
+.gallery-search-input {
+    padding:     6px 12px 6px 32px;
+    font-size:   10.5px;
+    border-radius: 6px;
+    width:       100%;
+}
+.gallery-search-icon {
+    position:       absolute;
+    left:           12px;
+    color:          var(--color-text-muted);
+    pointer-events: none;
+}
+
+/* Gallery count badge */
+.gallery-count-badge {
+    padding:     4px 12px;
+    font-size:   11px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+/* Gallery sort */
+#gallery-sort-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0 24px 0 10px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    border-radius: 6px;
+    height: 28px;
+    min-height: 28px;
+    line-height: 26px;
+    cursor: pointer;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--color-text-dim);
+    transition: all 0.15s ease;
+    
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.55)' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 10px;
+}
+
+#gallery-sort-select:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--color-text-d);
+}
+
+#gallery-sort-select:focus {
+    outline: none;
+    border-color: rgba(0, 210, 255, 0.4);
+    background-color: rgba(0, 210, 255, 0.03);
+    color: var(--color-text-d);
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.08);
+}
+
+#gallery-sort-select option {
+    background-color: #111420;
+    color: var(--color-text-d);
+    padding: 8px;
+}
+
+/* Gallery divider */
+.gallery-divider {
+    height:     20px;
+    width:      1px;
+    background: rgba(255, 255, 255, 0.10);
+    margin:     0 4px;
+}
+
+.dropdown-arrow {
+    margin-left: 2px;
+}
+
+/* Gallery empty state — definisi lebih lengkap ada di galleryGrid.css */
+
+/* ══════════════  QUEUE HEADER  ══════════════════════════════════ */
+.queue-header {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    flex-shrink:     0;
+}
+.queue-title {
+    font-size:      10px;
+    font-weight:    600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color:          var(--color-text-muted);
+}
+.queue-badge {
+    font-size:    10px;
+    color:        var(--color-text-muted);
+    font-family:  var(--font-mono);
+    background:   rgba(255, 255, 255, .04);
+    border:       1px solid var(--color-border);
+    padding:      2px 8px;
+    border-radius: 999px;
+}
+
+/* Scrollable queue list */
+.prompt-queue-list {
+    flex:       1;
+    overflow-y: auto;
+    display:    flex;
+    flex-direction: column;
+    gap:        6px;
+    min-height: 0;
+}
+
+/* ══════════════  LOG FILTER BAR  ════════════════════════════════ */
+.log-filter-bar {
+    display:         flex;
+    align-items:     center;
+    gap:             8px;
+    flex-shrink:     0;
+    flex-wrap:       wrap;
+    justify-content: space-between;
+    margin:          2px 0;
+}
+.filter-pills {
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+    flex-wrap:   wrap;
+}
+
+/* Log search */
+.log-search-wrap {
+    position:    relative;
+    display:     flex;
+    align-items: center;
+    min-width:   150px;
+    max-width:   240px;
+    flex:        1;
+}
+.log-search-input {
+    padding:       4px 10px 4px 28px !important;
+    font-size:     11.5px;
+    border-radius: 6px;
+}
+.log-search-icon {
+    position:       absolute;
+    left:           10px;
+    top:            50%;
+    transform:      translateY(-50%);
+    color:          var(--color-text-muted);
+    pointer-events: none;
+    display:        flex;
+    align-items:    center;
+    justify-content: center;
+}
+
+/* ══════════════  PROMPTS HINT  ══════════════════════════════════ */
+.prompts-hint {
+    font-size:   11.5px;
+    color:       var(--color-text-muted);
+    font-family: 'Inter', sans-serif;
+    flex-shrink: 0;
+    padding:     0 2px;
+    margin:      0;
+}
+
+/* ══════════════  SIDEBAR RESIZER  ═══════════════════════════════ */
+#sidebar-resizer {
+    width: 3px;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 1000;
+    flex-shrink: 0;
+    position: relative;
+    border-left: 1px solid var(--color-border);
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+#sidebar-resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -4px;
+    right: -4px;
+    cursor: col-resize;
+}
+
+#sidebar-resizer:hover,
+body.sidebar-resizing #sidebar-resizer {
+    background: var(--color-accent) !important;
+    box-shadow: 0 0 10px var(--color-accent), 0 0 4px var(--color-accent2);
+}
+
+/* Disable transitioning sidebar width when dragging */
+body.sidebar-resizing #sidebar {
+    transition: none !important;
+}
+
+/* ══════════════  COMPACT GALLERY TOOLBAR  ══════════════════════ */
+.gallery-compact #gallery-zoom-container,
+.gallery-compact #gallery-count {
+    display: none !important;
+}
+
+.gallery-compact #btn-toggle-select span,
+.gallery-compact #btn-toggle-trash span,
+.gallery-compact #btn-empty-trash span {
+    display: none;
+}
+
+.gallery-compact #btn-toggle-select,
+.gallery-compact #btn-toggle-trash,
+.gallery-compact #btn-empty-trash {
+    padding-left: 0;
+    padding-right: 0;
+    width: 28px;
+    justify-content: center;
+}

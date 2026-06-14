@@ -1,0 +1,186 @@
+/* css/base.css — Custom CSS: animasi keyframes, utilitas khusus yang tidak bisa Tailwind */
+/* Font dan variabel warna telah dipindah ke Tailwind config di index.html */
+
+/* ── CSS Custom Properties (dipakai di galeri, log, animasi) ─── */
+:root {
+    --color-accent:       #00d2ff;
+    --color-accent2:      #7b2ff7;
+    --color-green:        #22c55e;
+    --color-blue:         #3b82f6;
+    --color-amber:        #f59e0b;
+    --color-purple:       #a78bfa;
+    --color-red:          #ef4444;
+    --color-bg:           #080a10;
+    --color-panel:        #0c0f1a;
+    --color-card:         #111420;
+    --color-card-hover:   #161926;
+    --color-input:        #0a0c14;
+    --color-border:       rgba(255, 255, 255, 0.055);
+    --color-border-md:    rgba(255, 255, 255, 0.10);
+    --color-text-d:       #dde4f0;
+    --color-text-dim:     #8896aa;
+    --color-text-muted:   #4a5568;
+    --sidebar-width:      255px;
+    --titlebar-height:    40px;
+    --font-mono:          'JetBrains Mono', 'Fira Code', monospace;
+    /* Border radius (dipakai komponen CSS) */
+    --radius-lg:  12px;
+    --radius-md:  9px;
+    --radius-sm:  6px;
+    /* Font sizes (dipakai komponen CSS) */
+    --fs-xs:   9px;
+    --fs-sm:   10.5px;
+    --fs-base: 13px;
+    --fs-md:   14px;
+    --fs-lg:   16px;
+}
+
+/* ── Box sizing & base reset ────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── Base body — font-family dihandle Tailwind (font-sans) ──── */
+.app-body {
+    font-family:   'Inter', system-ui, sans-serif;
+    background:    var(--color-bg);
+    color:         var(--color-text-d);
+    height:        100vh;
+    overflow:      hidden;
+    font-size:     13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Monospace elements ─────────────────────────────────────── */
+textarea,
+.font-code,
+input[type="number"],
+.log-msg,
+.log-time,
+.gallery-thumb-name,
+.path-display,
+.field-input {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Number input: hide spinners ────────────────────────────── */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.14); }
+
+/* ── Utility ────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ══════════════  ANIMATIONS  ══════════════════════════════════ */
+
+@keyframes dot-pulse {
+    0%, 100% { box-shadow: 0 0 4px var(--color-green); }
+    50%       { box-shadow: 0 0 14px var(--color-green), 0 0 26px rgba(34,197,94,.35); }
+}
+@keyframes dot-pulse-amber {
+    0%, 100% { box-shadow: 0 0 4px var(--color-amber); }
+    50%       { box-shadow: 0 0 14px var(--color-amber), 0 0 26px rgba(245,158,11,.35); }
+}
+@keyframes dot-pulse-accent {
+    0%, 100% { box-shadow: 0 0 4px var(--color-accent); }
+    50%       { box-shadow: 0 0 14px var(--color-accent), 0 0 26px rgba(0,210,255,.35); }
+}
+@keyframes ring-pulse {
+    0%   { transform: scale(1);   opacity: .8; }
+    100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes shimmer-swipe {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes countUp {
+    from { transform: scale(0.85); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+@keyframes glow-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 1; }
+}
+@keyframes glow-pulse-bar {
+    0%, 100% { box-shadow: 0 0 12px rgba(0,210,255,.35); }
+    50%       { box-shadow: 0 0 24px rgba(0,210,255,.65), 0 0 10px rgba(123,47,247,.4); }
+}
+@keyframes progress-bar-stripes {
+    from { background-position: 0 0, 0 0; }
+    to   { background-position: 30px 0, 0 0; }
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-4px); }
+}
+@keyframes live-pulse-glow {
+    0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
+    70%  { transform: scale(1);    box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+@keyframes thumbFadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Animation helpers ──────────────────────────────────────── */
+.spin-slow  { animation: spin 3.5s linear infinite; }
+
+/* ── Gradient text ──────────────────────────────────────────── */
+.grad-text {
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ── Inline SVG icon base ───────────────────────────────────── */
+.inline-icon {
+    width:           14px;
+    height:          14px;
+    vertical-align:  -2.5px;
+    display:         inline-block;
+    margin:          0 3px;
+    stroke:          currentColor;
+    stroke-width:    2.2;
+    fill:            none;
+    stroke-linecap:  round;
+    stroke-linejoin: round;
+}
+
+/* Icon color classes */
+.blue-icon    { color: #60a5fa; }
+.green-icon   { color: #4ade80; }
+.amber-icon   { color: #fbbf24; }
+.red-icon     { color: #f87171; }
+.indigo-icon  { color: #c7d2fe; }
+.pink-icon    { color: #f472b6; }
+.accent-icon  { color: var(--color-accent); }
+.accent2-icon { color: var(--color-accent2); }
+.cyan-icon    { color: #22d3ee; }
+.yellow-icon  { color: #fde68a; }
+.purple-icon  { color: var(--color-purple); }
+.muted-icon   { color: var(--color-text-muted); }

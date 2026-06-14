@@ -21,9 +21,13 @@ const NEW_CONVERSATION_CANDIDATES = [
     'a[href*="flow"]:not([href*="?"])',
 ];
 
-const OUTPUT_DIR = path.join(__dirname, 'output');
+// Output directory: GUI sets process.env.OUTPUT_DIR; CLI falls back to ./output
+const OUTPUT_DIR = process.env.OUTPUT_DIR
+    ? path.resolve(process.env.OUTPUT_DIR)
+    : path.join(__dirname, 'output');
 const DOWNLOADS_TEMP_DIR = path.join(__dirname, 'tmp_downloads');
 const PROGRESS_FILE = path.join(OUTPUT_DIR, '.progress.json');
+
 
 // Resolusi yang tersedia di Flow (sesuai screenshot)
 // IMAGE_SIZE di .env menentukan opsi mana yang diklik di menu Flow
@@ -51,6 +55,25 @@ let _windowId   = null;
 function resetCdpCache() {
     _cdpSession = null;
     _windowId   = null;
+}
+
+/**
+ * Memaksimalkan jendela browser Chrome via CDP agar responsif menyesuaikan layar.
+ */
+async function maximizeWindow(page) {
+    if (process.env.HEADLESS === 'true') return;
+    try {
+        const ctx = page.context();
+        const cdpSession = await ctx.newCDPSession(page);
+        const { windowId } = await cdpSession.send('Browser.getWindowForTarget');
+        await cdpSession.send('Browser.setWindowBounds', {
+            windowId,
+            bounds: { windowState: 'maximized' },
+        });
+        log('Browser window maximized successfully via CDP.');
+    } catch (e) {
+        log(`Failed to maximize browser window: ${e.message}`, 'WARN');
+    }
 }
 
 /**
@@ -121,14 +144,15 @@ async function launchBrowser() {
     const userDataDir = process.env.USER_DATA_DIR || './browser_session';
     const isHeadless = process.env.HEADLESS === 'true';
 
-    log('Meluncurkan browser...');
+    log('Launching browser...');
     const context = await chromium.launchPersistentContext(userDataDir, {
         headless: isHeadless,
-        viewport: { width: 1280, height: 800 },
+        viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
         downloadsPath: DOWNLOADS_TEMP_DIR,
         acceptDownloads: true,
         args: [
+            '--start-maximized',
             '--disable-blink-features=AutomationControlled',
             '--no-sandbox',
             '--disable-infobars',
@@ -166,7 +190,7 @@ async function findFirstVisible(page, candidates, timeoutMs = 3000) {
 async function resetFlowSession(page, existingInput, timeoutMs) {
     const newBtn = await findFirstVisible(page, NEW_CONVERSATION_CANDIDATES, 2000);
     if (newBtn) {
-        log('Menemukan tombol New, mengklik untuk memulai sesi bersih...');
+        log('New button found, clicking to start clean session...');
         await newBtn.click();
         try {
             await page.waitForLoadState('networkidle', { timeout: 10000 });
@@ -175,15 +199,174 @@ async function resetFlowSession(page, existingInput, timeoutMs) {
         const freshInput = await waitForFlowReady(page, 45000);
         return freshInput || existingInput;
     }
-    log('Sesi sudah bersih, melanjutkan...');
+    log('Session is already clean, proceeding...');
     return existingInput;
 }
 
+// ── Buat proyek baru, tutup panel "Sesi tanpa judul", matikan Agen ──────────
+async function setupNewProject(page) {
+
+    // ── Langkah 1: Klik tombol "Project baru" ──────────────────────────────────
+    log('Creating a new project in Flow...');
+    const newProjectCandidates = [
+        'button:has-text("Project baru")',
+        'button:has-text("Proyek baru")',
+        'button:has-text("New project")',
+        'button:has-text("New Project")',
+        '[data-testid*="new-project"]',
+        'button[aria-label*="Project baru"]',
+    ];
+    const newProjectBtn = await findFirstVisible(page, newProjectCandidates, 6000);
+    if (newProjectBtn) {
+        await newProjectBtn.click();
+        log('✅ "New project" button clicked.');
+        try {
+            await page.waitForLoadState('networkidle', { timeout: 10000 });
+        } catch { /* lanjut */ }
+        await page.waitForTimeout(2500);
+    } else {
+        log('ℹ️  "New project" button not found, proceeding...', 'WARN');
+    }
+
+    // ── Langkah 2: Tunggu panel muncul, lalu tutup dengan scoped selector ──────
+    // Panel "Sesi tanpa judul" adalah sidebar bukan dialog.
+    // Tombol ✕ adalah SATU-SATUNYA button dengan teks "close" + "Tutup" di header panel.
+    log('Waiting for "Untitled session" panel to appear...');
+
+    let panelLocator = null;
+    try {
+        // Tunggu teks "Sesi tanpa judul" muncul di DOM (max 8 detik)
+        await page.waitForSelector('text="Sesi tanpa judul"', { timeout: 8000, state: 'visible' });
+        // Ambil elemen kontainer terdekat yang mengandung teks tersebut
+        panelLocator = page.locator('div').filter({ hasText: /^Sesi tanpa judul$/ }).last();
+        log('"Untitled session" panel detected.');
+    } catch {
+        // Coba versi Inggris
+        try {
+            await page.waitForSelector('text="Untitled session"', { timeout: 3000, state: 'visible' });
+            panelLocator = page.locator('div').filter({ hasText: /^Untitled session$/ }).last();
+            log('"Untitled session" panel detected.');
+        } catch {
+            log('ℹ️  Session panel not detected, proceeding...', 'WARN');
+        }
+    }
+
+    if (panelLocator) {
+        // Cari tombol close yang paling dekat: naik ke ancestor yang berisi tombol
+        // Struktur: header row → ☰ "Sesi tanpa judul" ↗ ✕
+        // Tombol ✕ memiliki teks gabungan "close" (icon) + "Tutup"
+        let panelClosed = false;
+
+        // Metode 1: getByRole scoped — cari button bernama "Tutup" atau "Close"
+        try {
+            const closeBtn = page.getByRole('button', { name: /^(Tutup|Close)$/i });
+            const count = await closeBtn.count();
+            for (let i = 0; i < count; i++) {
+                const btn = closeBtn.nth(i);
+                if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                    await btn.click();
+                    await page.waitForTimeout(800);
+                    panelClosed = true;
+                    log('✅ Panel closed via getByRole("button", {name: Tutup/Close}).');
+                    break;
+                }
+            }
+        } catch { /* lanjut ke metode berikutnya */ }
+
+        // Metode 2: Cari tombol yang berisi KEDUANYA "close" DAN "Tutup"
+        if (!panelClosed) {
+            try {
+                const closeBtns = page.locator('button').filter({ hasText: 'Tutup' });
+                const count = await closeBtns.count();
+                for (let i = 0; i < count; i++) {
+                    const btn = closeBtns.nth(i);
+                    if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+                        await btn.click();
+                        await page.waitForTimeout(800);
+                        panelClosed = true;
+                        log('✅ Panel closed via button.filter(hasText: Tutup/Close).');
+                        break;
+                    }
+                }
+            } catch { /* lanjut */ }
+        }
+
+        // Verifikasi apakah panel benar-benar sudah tertutup
+        await page.waitForTimeout(500);
+        const panelStillVisible = await page.locator('text="Sesi tanpa judul"').isVisible({ timeout: 1500 }).catch(() => false);
+
+        if (panelStillVisible) {
+            log('⚠️  Panel is still open! Trying Escape...', 'WARN');
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(800);
+
+            // Cek sekali lagi setelah Escape
+            const stillOpen = await page.locator('text="Sesi tanpa judul"').isVisible({ timeout: 1500 }).catch(() => false);
+            if (!stillOpen) {
+                log('✅ Panel closed via Escape.');
+            } else {
+                log('⚠️  Panel could not be closed.', 'WARN');
+            }
+        } else {
+            log('✅ "Untitled session" panel is no longer in DOM.');
+        }
+    }
+
+    // ── Langkah 3: Matikan tombol "Agen" di area input utama ───────────────────
+    // Hanya lakukan SETELAH panel tertutup supaya tidak match tombol di dalam panel
+    log('Checking "Agent" button in main input area...');
+    await page.waitForTimeout(800);
+
+    try {
+        // Deteksi: Agen aktif jika ada tombol "Petunjuk Agen"
+        const isAgenActive = await page.locator(
+            'button:has-text("Petunjuk Agen"), button:has-text("Agent Instructions")'
+        ).first().isVisible({ timeout: 3000 }).catch(() => false);
+
+        // Tombol Agen toggle — pastikan bukan "Petunjuk Agen"
+        const agenBtn = page.locator(
+            'button:has-text("Agen"):not(:has-text("Petunjuk")), ' +
+            'button:has-text("Agent"):not(:has-text("Instructions"))'
+        ).first();
+        const agenVisible = await agenBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (isAgenActive || agenVisible) {
+            log(isAgenActive ? 'Agent is active. Turning off...' : 'Agent button visible. Clicking...');
+
+            if (agenVisible) {
+                await agenBtn.click();
+                await page.waitForTimeout(1200);
+
+                // Handle modal konfirmasi "Agen Anda aktif" jika muncul
+                const okeBtn = page.locator('button:has-text("Oke"), button:has-text("OK")').first();
+                if (await okeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    log('  Confirmation modal → clicking "OK"...');
+                    await okeBtn.click();
+                    await page.waitForTimeout(1000);
+                    // Klik Agen lagi untuk benar-benar off
+                    if (await agenBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        await agenBtn.click();
+                        await page.waitForTimeout(600);
+                    }
+                }
+                log('✅ "Agent" button turned off.');
+            }
+        } else {
+            log('ℹ️  "Agent" button inactive or not found.');
+        }
+    } catch (err) {
+        log(`ℹ️  Failed to check Agent: ${err.message}`, 'WARN');
+    }
+
+    await page.waitForTimeout(500);
+}
+
 async function waitForFlowReady(page, maxWaitMs = 60000) {
-    log('Menunggu halaman Flow siap...');
+
+    log('Waiting for Flow page to be ready...');
     const input = await waitForElement(page, PROMPT_INPUT_SELECTOR, maxWaitMs);
     if (input) {
-        log('✅ Halaman siap!');
+        log('✅ Page ready!');
         return input;
     }
     return null;
@@ -220,30 +403,43 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
         // ── Progress log setiap 15s ──
         const progressInterval = setInterval(() => {
             const elapsed = Math.round((Date.now() - start) / 1000);
-            log(`  Menunggu generate... ${elapsed}s`);
+            log(`  Waiting for generation... ${elapsed}s`);
         }, 15000);
 
         // ── KeepAlive: setiap 20s bring tab ke depan + emit fake activity ──
         // Ini mencegah Flow berhenti generate saat tab di-background
         const keepAliveInterval = setInterval(async () => {
             try {
+                if (page.isClosed()) {
+                    done(false);
+                    return;
+                }
                 await page.bringToFront();
                 // Emit synthetic mousemove agar browser tidak throttle page
                 await page.mouse.move(640, 400);
             } catch { /* abaikan jika page sudah mati */ }
         }, 20000);
 
+        const closeHandler = () => {
+            log('  ⚡ Page was closed during image detection!', 'WARN');
+            done(false);
+        };
+        page.on('close', closeHandler);
+
         const done = (found) => {
             clearTimeout(batchTimer);
             clearTimeout(globalTimer);
             clearInterval(progressInterval);
             clearInterval(keepAliveInterval);
-            page.off('response', responseHandler);
+            try {
+                page.off('close', closeHandler);
+                page.off('response', responseHandler);
+            } catch { /* page already closed */ }
             resolve({ found, newSrcs: found ? collectedUrls : [] });
         };
 
         const globalTimer = setTimeout(() => {
-            log('  ⏱️ Timeout menunggu gambar dari server.');
+            log('  ⏱️ Timeout waiting for images from server.');
             done(false);
         }, maxWaitMs);
 
@@ -256,7 +452,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
                     !collectedUrls.includes(url)
                 ) {
                     collectedUrls.push(url);
-                    log(`  📸 Gambar ${collectedUrls.length} terdeteksi via network!`);
+                    log(`  📸 Image ${collectedUrls.length} detected via network!`);
                     clearTimeout(batchTimer);
                     batchTimer = setTimeout(() => done(true), 2000);
                 }
@@ -307,7 +503,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         // Restore window jika minimized + bringToFront agar menu muncul
         await restoreWindow(page);
         await page.bringToFront();
-        log('  🖱️  Klik kanan pada gambar...');
+        log('  🖱️  Right click on image...');
         await imgLocator.click({ button: 'right' });
         // Tunggu context menu muncul
         await page.waitForTimeout(800);
@@ -346,7 +542,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
                         }
                     }
                     if (downloadMenuItem) {
-                        log(`  📋 Menu "Download" ditemukan via: ${sel}`);
+                        log(`  📋 "Download" menu found via: ${sel}`);
                         break;
                     }
                 }
@@ -354,25 +550,19 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         }
 
         if (!downloadMenuItem) {
-            log('  ⚠️  Menu "Download" tidak ditemukan setelah klik kanan.', 'WARN');
-            // Screenshot debug
-            try {
-                const debugPath = path.join(OUTPUT_DIR, `_debug_no_menu_${Date.now()}.png`);
-                await page.screenshot({ path: debugPath });
-                log(`  📸 Screenshot debug: ${path.basename(debugPath)}`);
-            } catch {}
+            log('  ⚠️  "Download" menu not found after right click.', 'WARN');
             await page.keyboard.press('Escape');
             return false;
         }
 
         // ── Langkah 3: Hover item "Download" untuk memunculkan submenu resolusi ──
-        log('  🖱️  Hover "Download" untuk membuka submenu resolusi...');
+        log('  🖱️  Hovering over "Download" to open resolution submenu...');
         await downloadMenuItem.hover({ force: true });
         // Tunggu submenu muncul — Flow butuh ~500-1000ms render submenu
         await page.waitForTimeout(1000);
 
         // ── Langkah 4: Cari dan klik opsi resolusi target (misal "2K") ──
-        log(`  🔍 Mencari opsi resolusi "${imageSize.toUpperCase()}" di submenu...`);
+        log(`  🔍 Searching for resolution option "${imageSize.toUpperCase()}" in submenu...`);
         let resolutionItem = null;
 
         for (const label of targetLabels) {
@@ -395,7 +585,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
                         const el = els.nth(ci);
                         if (await el.isVisible()) {
                             resolutionItem = el;
-                            log(`  ✅ Opsi "${label}" ditemukan via: ${sel}`);
+                            log(`  ✅ Option "${label}" found via: ${sel}`);
                             break;
                         }
                     }
@@ -406,12 +596,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         }
 
         if (!resolutionItem) {
-            log(`  ⚠️  Opsi resolusi "${imageSize.toUpperCase()}" tidak ditemukan di submenu.`, 'WARN');
-            try {
-                const debugPath = path.join(OUTPUT_DIR, `_debug_no_resolution_${Date.now()}.png`);
-                await page.screenshot({ path: debugPath });
-                log(`  📸 Screenshot debug submenu: ${path.basename(debugPath)}`);
-            } catch {}
+            log(`  ⚠️  Resolution option "${imageSize.toUpperCase()}" not found in submenu.`, 'WARN');
             await page.keyboard.press('Escape');
             return false;
         }
@@ -419,7 +604,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         // ── Langkah 5: Intercept URL download SEBELUM klik resolusi ──
         // Strategi: tangkap URL final dari request yang dipicu klik "2K",
         // lalu fetch langsung — tanpa saveAs, tanpa dialog, 100% background-safe.
-        log(`  ⏳ Menunggu URL download (timeout: ${Math.round(downloadTimeout / 1000)}s)...`);
+        log(`  ⏳ Waiting for download URL (timeout: ${Math.round(downloadTimeout / 1000)}s)...`);
 
         let resolvedDownloadUrl = null;
 
@@ -453,7 +638,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
 
         // ── Langkah 6: Klik opsi resolusi — ini memicu download ──
         await resolutionItem.click();
-        log(`  🖱️  Klik "${imageSize.toUpperCase()}" — menunggu file download...`);
+        log(`  🖱️  Clicking "${imageSize.toUpperCase()}" — waiting for download...`);
 
         // Tunggu sebentar agar request sempat ditangkap
         await page.waitForTimeout(3000);
@@ -462,7 +647,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         // ── Metode A: Fetch langsung dari URL yang diintercept (tidak butuh saveAs) ──
         if (resolvedDownloadUrl) {
             try {
-                log(`  🔗 Fetch file dari: ${resolvedDownloadUrl.substring(0, 80)}...`);
+                log(`  🔗 Fetching file from: ${resolvedDownloadUrl.substring(0, 80)}...`);
                 const resp = await page.request.get(resolvedDownloadUrl, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
                     timeout: downloadTimeout,
@@ -471,12 +656,12 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
                     const body = await resp.body();
                     if (body.length > 10000) { // minimal 10KB untuk validasi bukan error page
                         fs.writeFileSync(filePath, body);
-                        log(`  ✅ Download selesai via direct fetch (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
+                        log(`  ✅ Download completed via direct fetch (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
                         return true;
                     }
                 }
             } catch (fetchErr) {
-                log(`  ⚠️  Direct fetch gagal: ${fetchErr.message}`, 'WARN');
+                log(`  ⚠️  Direct fetch failed: ${fetchErr.message}`, 'WARN');
             }
         }
 
@@ -489,7 +674,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
                 try {
                     await download.saveAs(filePath);
                     if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-                        log(`  ✅ Download selesai via saveAs (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
+                        log(`  ✅ Download completed via saveAs (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
                         return true;
                     }
                 } catch { /* retry */ }
@@ -497,28 +682,31 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
             }
         }
 
-        // ── Fallback Metode B: dari URL yang diintercept via network ──
-        if (interceptedImageUrl) {
-            log(`  🔗 Fallback: download dari URL terdeteksi...`);
+        // ── Fallback Metode C: dari resolvedDownloadUrl yang sudah di-intercept ──
+        if (resolvedDownloadUrl) {
+            log(`  🔗 Fallback: re-fetching from previously intercepted URL...`);
             try {
-                const resp = await page.request.get(interceptedImageUrl);
+                const resp = await page.request.get(resolvedDownloadUrl);
                 if (resp.ok()) {
-                    fs.writeFileSync(filePath, await resp.body());
-                    if (fs.statSync(filePath).size > 0) {
-                        log(`  ✅ Download selesai via intercepted URL: ${path.basename(filePath)}`, 'SUCCESS');
-                        return true;
+                    const body = await resp.body();
+                    if (body.length > 10000) {
+                        fs.writeFileSync(filePath, body);
+                        if (fs.statSync(filePath).size > 0) {
+                            log(`  ✅ Download completed via re-fetching intercepted URL: ${path.basename(filePath)}`, 'SUCCESS');
+                            return true;
+                        }
                     }
                 }
             } catch (fetchErr) {
-                log(`  ⚠️  Gagal fetch dari intercepted URL: ${fetchErr.message}`, 'WARN');
+                log(`  ⚠️  Failed to re-fetch from intercepted URL: ${fetchErr.message}`, 'WARN');
             }
         }
 
-        log('  ⚠️  Download event tidak terdeteksi setelah klik resolusi.', 'WARN');
+        log('  ⚠️  Download event not detected after clicking resolution option.', 'WARN');
         return false;
 
     } catch (err) {
-        log(`  ❌ Error saat download via menu: ${err.message}`, 'ERROR');
+        log(`  ❌ Error during menu download: ${err.message}`, 'ERROR');
         // Pastikan menu tertutup
         try { await page.keyboard.press('Escape'); } catch {}
         return false;
@@ -572,22 +760,27 @@ async function downloadImageDirect(page, src, filePath) {
  * 2. Untuk setiap gambar: klik kanan → Download → pilih resolusi dari .env
  * 3. Fallback ke download langsung jika menu gagal
  */
-async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSize) {
+async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSize, prompt) {
     if (newSrcs.length === 0) return 0;
+
+    const failedDir = path.join(outputDir, 'failed');
+    if (!fs.existsSync(failedDir)) fs.mkdirSync(failedDir, { recursive: true });
+    const failedTxtPath = path.join(failedDir, 'failed.txt');
+    let anyFailed = false; // flag: ada gambar yang masuk folder failed?
 
     const sizeSuffix = (!imageSize || imageSize.toLowerCase() === 'native')
         ? ''
         : `_${imageSize.toLowerCase()}`;
 
-    // downloadPath sudah di-set via context launchPersistentContext options (downloadsPath)
-    // Tidak perlu route override di sini
-
     let downloaded = 0;
 
     for (let i = 0; i < newSrcs.length; i++) {
         const src = newSrcs[i];
-        const filePath = path.join(outputDir, `${baseName}${sizeSuffix}_${i + 1}.png`);
-        log(`  Mendownload gambar ${i + 1}/${newSrcs.length} via Flow menu...`);
+        // Path utama: folder output normal (hanya jika 2K/4K berhasil)
+        const filePath       = path.join(outputDir, `${baseName}${sizeSuffix}_${i + 1}.png`);
+        // Path fallback: folder failed (jika resolusi target gagal)
+        const failedFilePath = path.join(failedDir,  `${baseName}_native_${i + 1}.png`);
+        log(`  Downloading image ${i + 1}/${newSrcs.length} via Flow menu...`);
 
         // ── Cari elemen <img> yang cocok dengan src hasil deteksi network ──
         // Strategi berlapis karena URL di DOM bisa sedikit berbeda dari URL network response
@@ -597,7 +790,7 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
         const exactMatch = page.locator(`img[src="${src}"]`);
         if (await exactMatch.count() > 0) {
             imgLocator = exactMatch.first();
-            log(`  🎯 Gambar ditemukan via exact src match.`);
+            log(`  🎯 Image found via exact src match.`);
         }
 
         // Strategi 2: Partial URL match (ambil bagian unik dari URL)
@@ -610,7 +803,7 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
                     const partialMatch = page.locator(`img[src*="${partialKey}"]`);
                     if (await partialMatch.count() > 0) {
                         imgLocator = partialMatch.first();
-                        log(`  🎯 Gambar ditemukan via partial URL: ...${partialKey}`);
+                        log(`  🎯 Image found via partial URL: ...${partialKey}`);
                     }
                 }
             } catch { /* URL parsing gagal, skip */ }
@@ -629,7 +822,7 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
                         const box = await el.boundingBox();
                         if (box && box.width > 100 && box.height > 100) {
                             imgLocator = el;
-                            log(`  🎯 Gambar ditemukan via last-visible fallback (index ${ci}).`);
+                            log(`  🎯 Image found via last-visible fallback (index ${ci}).`);
                             break;
                         }
                     }
@@ -645,28 +838,44 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
         }
 
         if (!ok) {
-            // ── Fallback: download langsung dari URL network response ──
-            log(`  ↩️  Fallback ke download langsung...`);
+            // ── Fallback: download langsung ke folder FAILED (bukan folder utama) ──
+            log(`  ↩️  Download ${imageSize.toUpperCase()} failed — saving native to failed/ folder...`);
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
-                    ok = await downloadImageDirect(page, src, filePath);
-                    if (ok) break;
+                    ok = await downloadImageDirect(page, src, failedFilePath);
+                    if (ok) {
+                        const stat = fs.statSync(failedFilePath);
+                        const kb = Math.round(stat.size / 1024);
+                        log(`  📂 Saved in failed/ (${kb} KB): ${path.basename(failedFilePath)}`, 'WARN');
+                        anyFailed = true;
+                        break;
+                    }
                     if (attempt < 2) await page.waitForTimeout(2000);
                 } catch (err) {
                     if (attempt < 2) await page.waitForTimeout(2000);
-                    else log(`  ❌ Error download fallback: ${err.message}`, 'ERROR');
+                    else log(`  ❌ Fallback download error: ${err.message}`, 'ERROR');
                 }
             }
+            // Gambar failed TIDAK dihitung sebagai sukses di folder utama
+            continue;
         }
 
         if (ok) {
             const stat = fs.statSync(filePath);
             const kb = Math.round(stat.size / 1024);
-            log(`  ✅ Tersimpan (${kb} KB): ${path.basename(filePath)}`, 'SUCCESS');
+            log(`  ✅ Saved ${imageSize.toUpperCase()} (${kb} KB): ${path.basename(filePath)}`, 'SUCCESS');
             downloaded++;
         } else {
-            log(`  ⚠️  Gagal download gambar ${i + 1}`, 'WARN');
+            log(`  ⚠️  Failed to download image ${i + 1} (all methods failed)`, 'WARN');
         }
+    }
+
+    // Jika ada gambar yang masuk folder failed/, catat prompt-nya sekali ke failed.txt
+    if (anyFailed && prompt) {
+        try {
+            fs.appendFileSync(failedTxtPath, prompt + '\n', 'utf-8');
+            log(`  📝 Prompt recorded in failed/failed.txt`);
+        } catch { /* abaikan */ }
     }
 
     return downloaded;
@@ -701,7 +910,11 @@ async function setupPage(context, timeoutMs) {
 
     // Paksa page tetap di depan agar interaksi UI tidak di-throttle
     await page.bringToFront();
-    log(`Membuka ${FLOW_URL} ...`);
+
+    // Memaksimalkan jendela Chrome via CDP agar responsif mengikuti layar penuh
+    await maximizeWindow(page);
+
+    log(`Opening ${FLOW_URL} ...`);
 
     // ── CDP: nonaktifkan throttling agar tab tidak di-throttle saat di-background ──
     try {
@@ -716,16 +929,19 @@ async function setupPage(context, timeoutMs) {
     } catch { /* lanjut */ }
     await page.waitForTimeout(3000);
 
+    // ── Setup proyek baru: buat proyek, tutup popup, matikan Agen ──
+    await setupNewProject(page);
+
     let promptInput = await waitForFlowReady(page, 60000);
     if (!promptInput) {
-        log('Kotak input belum muncul. Mungkin perlu login.', 'WARN');
-        log('Silakan login di jendela browser. Menunggu hingga 120 detik...', 'WARN');
+        log('Input box not found. Login might be required.', 'WARN');
+        log('Please log in using the browser window. Waiting up to 120 seconds...', 'WARN');
         promptInput = await waitForFlowReady(page, 120000);
         if (!promptInput) return { page, promptInput: null };
     }
 
-    log('Mereset sesi Flow sebelumnya...');
-    promptInput = await resetFlowSession(page, promptInput, timeoutMs);
+    // Catatan: resetFlowSession TIDAK dipanggil di sini karena setupNewProject
+    // sudah membuat proyek baru yang bersih setiap kali.
 
     return { page, promptInput };
 }
@@ -734,6 +950,7 @@ async function setupPage(context, timeoutMs) {
 //  MAIN
 // ============================================================
 async function runAutomation() {
+    const runStartTime = Date.now();
     // ── Pastikan folder output dan temp ada ──
     if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     if (fs.existsSync(DOWNLOADS_TEMP_DIR)) {
@@ -741,16 +958,16 @@ async function runAutomation() {
     }
     fs.mkdirSync(DOWNLOADS_TEMP_DIR, { recursive: true });
 
-    log(`📋 Log tersimpan di: ${LOG_FILE}`);
+    log(`📋 Log saved in: ${LOG_FILE}`);
 
     // ── Baca prompts ──
     const promptsPath = path.join(__dirname, 'prompts.txt');
-    if (!fs.existsSync(promptsPath)) { log('File prompts.txt tidak ditemukan!', 'ERROR'); return; }
+    if (!fs.existsSync(promptsPath)) { log('File prompts.txt not found!', 'ERROR'); return; }
 
     const prompts = fs.readFileSync(promptsPath, 'utf-8')
         .split('\n').map(p => p.trim()).filter(p => p.length > 0 && !p.startsWith('#'));
 
-    if (prompts.length === 0) { log('prompts.txt kosong.', 'ERROR'); return; }
+    if (prompts.length === 0) { log('prompts.txt is empty.', 'ERROR'); return; }
 
     const imageSize = (process.env.IMAGE_SIZE || '2k').toLowerCase();
     const timeoutMs  = parseInt(process.env.TIMEOUT_MS)  || 60000;
@@ -761,12 +978,12 @@ async function runAutomation() {
     const completed = loadProgress();
     const pending = prompts.filter(p => !completed.has(p));
     const skipped = prompts.length - pending.length;
-    if (skipped > 0) log(`⏩ Melanjutkan: ${skipped} prompt sudah selesai, ${pending.length} tersisa.`);
-    log(`Ditemukan ${pending.length} prompt yang perlu diproses.`);
-    log(`📐 Resolusi download: ${imageSize.toUpperCase()}`);
+    if (skipped > 0) log(`⏩ Resuming: ${skipped} prompts already completed, ${pending.length} remaining.`);
+    log(`Found ${pending.length} prompts to process.`);
+    log(`📐 Download resolution: ${imageSize.toUpperCase()}`);
 
     if (pending.length === 0) {
-        log('✅ Semua prompt sudah selesai sebelumnya!', 'SUCCESS');
+        log('✅ All prompts completed previously!', 'SUCCESS');
         // Reset progress jika ingin mulai ulang
         return;
     }
@@ -784,22 +1001,22 @@ async function runAutomation() {
         if (browserLaunches > MAX_BROWSER_RELAUNCHES) {
             throw new Error(`Browser sudah direlaunch ${MAX_BROWSER_RELAUNCHES}x. Hentikan untuk mencegah loop tak terbatas.`);
         }
-        log(`🔄 Browser launch ke-${browserLaunches}...`);
+        log(`🔄 Browser launch #${browserLaunches}...`);
         context = await launchBrowser();
         const result = await setupPage(context, timeoutMs);
         page = result.page;
         promptInput = result.promptInput;
-        if (!promptInput) throw new Error('Gagal mendapat input box setelah relaunch.');
+        if (!promptInput) throw new Error('Failed to get input box after relaunch.');
     }
 
     try {
         await initBrowser();
-        log('✅ Siap! Memulai pemrosesan prompt...\n');
+        log('✅ Ready! Starting prompt processing...\n');
 
         for (let i = 0; i < pending.length; i++) {
             const prompt = pending[i];
             const globalIdx = prompts.indexOf(prompt) + 1;
-            log(`[${globalIdx}/${prompts.length}] "${prompt.substring(0, 70)}"`);
+            log(`[${globalIdx}/${prompts.length}] "${prompt}"`);
 
             let success = false;
 
@@ -808,14 +1025,14 @@ async function runAutomation() {
                     // ── Deteksi: context mati → relaunch browser penuh ──
                     const ctxAlive = await isContextAlive(context);
                     if (!ctxAlive) {
-                        log('  ⚡ Browser context mati! Relaunch browser...', 'WARN');
+                        log('  ⚡ Browser context is dead! Relaunching browser...', 'WARN');
                         await initBrowser();
                     } else if (!await isPageAlive(page)) {
-                        log('  ⚡ Halaman mati, buka halaman baru...', 'WARN');
+                        log('  ⚡ Page is dead, opening new page...', 'WARN');
                         const result = await setupPage(context, timeoutMs);
                         page = result.page;
                         promptInput = result.promptInput;
-                        if (!promptInput) throw new Error('Gagal setup halaman baru.');
+                        if (!promptInput) throw new Error('Failed to setup new page.');
                     }
 
                     const srcsBefore = await page.evaluate(() =>
@@ -829,9 +1046,10 @@ async function runAutomation() {
                     await page.waitForTimeout(randomDelay(400, 700));
 
                     // Setup deteksi network SEBELUM Enter
-                    const detectionPromise = setupImageDetection(page, srcsBefore, timeoutMs * 3);
+                    const dlTimeoutMs = parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 300000;
+                    const detectionPromise = setupImageDetection(page, srcsBefore, dlTimeoutMs);
                     await page.keyboard.press('Enter');
-                    log('  Generate dimulai...');
+                    log('  Generation started...');
 
                     const { found: resultFound, newSrcs } = await detectionPromise;
 
@@ -841,76 +1059,80 @@ async function runAutomation() {
 
                     if (resultFound) {
                         await page.waitForTimeout(1500);
-                        const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR, imageSize);
+                        const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR, imageSize, prompt);
                         if (dlCount > 0) {
-                            log(`  ✅ ${dlCount} gambar didownload.\n`, 'SUCCESS');
-                            // ── Simpan progress setelah berhasil ──
+                            log(`  ✅ ${dlCount} images downloaded to main folder.\n`, 'SUCCESS');
                             completed.add(prompt);
                             saveProgress(completed);
                             success = true;
                             break;
                         }
                         if (attempt < maxRetries) {
-                            log(`  ⚠️  Download gagal (attempt ${attempt}), mencoba lagi...\n`, 'WARN');
-                        } else {
-                            try {
-                                const sp = path.join(OUTPUT_DIR, `${baseName}_screenshot.png`);
-                                await page.screenshot({ path: sp });
-                                log(`  ⚠️  Screenshot disimpan: ${path.basename(sp)}\n`, 'WARN');
-                            } catch {}
+                            log(`  ⚠️  Download ${imageSize.toUpperCase()} failed (attempt ${attempt}), retrying...\n`, 'WARN');
                         }
                     } else {
-                        log(`  ⚠️  Timeout attempt ${attempt}.\n`, 'WARN');
-                        if (attempt === maxRetries) {
-                            try {
-                                const sp = path.join(OUTPUT_DIR, `${baseName}_timeout.png`);
-                                await page.screenshot({ path: sp });
-                                log(`  ⚠️  Screenshot timeout: ${path.basename(sp)}\n`, 'WARN');
-                            } catch {}
-                        }
+                        log(`  ⚠️  Timeout on attempt ${attempt} — no images detected.\n`, 'WARN');
                     }
 
                 } catch (err) {
                     const msg = err.message || '';
-                    const isCtxDead = msg.includes('closed') || msg.includes('Target page') || msg.includes('browser has been closed');
+                    const isCtxDead = 
+                        msg.includes('closed') || 
+                        msg.includes('Target page') || 
+                        msg.includes('browser has been closed') || 
+                        msg.includes('context') ||
+                        msg.includes('connection closed') ||
+                        msg.includes('Protocol error');
                     log(`  ❌ Attempt ${attempt} error: ${msg}`, 'ERROR');
 
-                    if (attempt < maxRetries) {
-                        if (isCtxDead) {
-                            log('  🔄 Context/browser mati, relaunch...', 'WARN');
-                            try { await initBrowser(); } catch (re) {
-                                log(`  ❌ Gagal relaunch: ${re.message}`, 'ERROR');
-                                if (re.message.includes('relaunch')) throw re; // batas tercapai
-                            }
-                        } else {
-                            await new Promise(r => setTimeout(r, randomDelay(3000, 6000)));
+                    if (isCtxDead) {
+                        log('  🔄 Context/browser dead (possibly closed by user). Relaunching browser and retrying this prompt...', 'WARN');
+                        try {
+                            await initBrowser();
+                            attempt--; // Decrement attempt to retry the same prompt attempt
+                        } catch (re) {
+                            log(`  ❌ Relaunch failed: ${re.message}`, 'ERROR');
+                            if (re.message.includes('relaunch')) throw re; // batas relaunch tercapai
                         }
+                    } else if (attempt < maxRetries) {
+                        await new Promise(r => setTimeout(r, randomDelay(3000, 6000)));
                     }
                 }
             }
 
             if (!success) {
-                log(`❌ Prompt "${prompt.substring(0, 40)}" gagal setelah ${maxRetries} percobaan.\n`, 'ERROR');
+                log(`❌ Prompt "${prompt.substring(0, 40)}" failed after ${maxRetries} attempts.\n`, 'ERROR');
             }
 
             // Jeda antar prompt
             if (i < pending.length - 1) {
                 const gap = randomDelay(2000, 4000);
-                log(`Jeda ${Math.round(gap / 1000)}s...`);
+                log(`Delay ${Math.round(gap / 1000)}s...`);
                 try { await page.waitForTimeout(gap); } catch { await new Promise(r => setTimeout(r, gap)); }
             }
         }
 
-        log('\n🎉 Selesai! Semua prompt sudah diproses.', 'SUCCESS');
-        log(`📁 Gambar tersimpan di: ${OUTPUT_DIR}`, 'SUCCESS');
+        const durationMs = Date.now() - runStartTime;
+        const durationSec = Math.floor(durationMs / 1000);
+        const min = Math.floor(durationSec / 60);
+        const sec = durationSec % 60;
+        const durationStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+
+        log(`\n🎉 All prompts completed in ${durationStr}.`, 'SUCCESS');
+        log(`📁 Images saved in: ${OUTPUT_DIR}`, 'SUCCESS');
         // Hapus file progress setelah semua selesai agar next run mulai dari awal
         try { fs.unlinkSync(PROGRESS_FILE); } catch {}
 
     } catch (error) {
-        log(`Kesalahan fatal: ${error.message}`, 'ERROR');
-        log(`Progress tersimpan. Jalankan ulang bot untuk melanjutkan dari prompt yang belum selesai.`, 'WARN');
+        const durationMs = Date.now() - runStartTime;
+        const durationSec = Math.floor(durationMs / 1000);
+        const min = Math.floor(durationSec / 60);
+        const sec = durationSec % 60;
+        const durationStr = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+        log(`Fatal error after ${durationStr}: ${error.message}`, 'ERROR');
+        log(`Progress saved. Restart the bot to resume unfinished prompts.`, 'WARN');
     } finally {
-        log('Menutup browser...');
+        log('Closing browser...');
         try { if (context) await context.close(); } catch {}
     }
 }

@@ -1,0 +1,50 @@
+/* css/components/galleryGrid.css
+   Minimal Custom Styles for scrollbars and animations.
+   All core gallery layout and sizing are now managed by Tailwind CSS utility classes in HTML and JS. */
+
+/* ══════════════  CUSTOM SCROLLBARS  ══════════════════════════ */
+#gallery-grid::-webkit-scrollbar,
+#gallery-inspector::-webkit-scrollbar {
+    width:         6px;
+    height:        6px;
+}
+
+#gallery-grid::-webkit-scrollbar-track,
+#gallery-inspector::-webkit-scrollbar-track {
+    background:    transparent;
+}
+
+#gallery-grid::-webkit-scrollbar-thumb,
+#gallery-inspector::-webkit-scrollbar-thumb {
+    background:    rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+#gallery-grid::-webkit-scrollbar-thumb:hover,
+#gallery-inspector::-webkit-scrollbar-thumb:hover {
+    background:    rgba(255, 255, 255, 0.15);
+}
+
+/* ══════════════  KEYFRAME ANIMATIONS  ═════════════════════════ */
+@keyframes thumbFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sidebarSlideIn {
+    from { transform: translateX(280px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes contextMenuFadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.gallery-thumb {
+    animation: thumbFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+#gallery-inspector:not(.hidden) {
+    animation: sidebarSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

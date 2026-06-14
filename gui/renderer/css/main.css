@@ -1,0 +1,18 @@
+/* css/main.css — Entry point CSS; mengimport semua file CSS sesuai urutan dependensi */
+
+/* 1. Fondasi: variabel, reset, animasi, font */
+@import url('./base.css');
+
+/* 2. Struktur halaman: titlebar, sidebar, main area, tabs */
+@import url('./layout.css');
+
+/* 3. Komponen UI */
+@import url('./components/titlebarControls.css');
+@import url('./components/sidebarSection.css');
+@import url('./components/buttons.css');
+@import url('./components/statCards.css');
+@import url('./components/logConsole.css');
+@import url('./components/galleryGrid.css');
+@import url('./components/lightbox.css');
+@import url('./components/prompts.css');
+@import url('./components/modal.css');

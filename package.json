@@ -4,11 +4,17 @@
     "description": "Playwright automation for Google Flow",
     "main": "index.js",
     "scripts": {
-        "start": "node index.js"
+        "start": "node index.js",
+        "gui": "electron gui/main.js",
+        "build:gui": "electron-builder --win --config electron-builder.yml"
     },
     "dependencies": {
         "dotenv": "^16.4.5",
         "playwright": "^1.42.1",
         "sharp": "^0.34.5"
+    },
+    "devDependencies": {
+        "electron": "^42.4.0",
+        "electron-builder": "^26.15.3"
     }
 }

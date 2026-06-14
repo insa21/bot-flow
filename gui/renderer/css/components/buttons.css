@@ -1,0 +1,169 @@
+/* css/components/buttons.css — Semua tombol aksi: primary, stop, toolbar, badge */
+
+/* ══════════════  BTN PRIMARY (Start Bot)  ═══════════════════════ */
+.btn-primary {
+    display:          flex;
+    align-items:      center;
+    justify-content:  center;
+    gap:              8px;
+    padding:          11px 16px;
+    border-radius:    11px;
+    font-size:        var(--fs-base);
+    font-weight:      700;
+    letter-spacing:   .03em;
+    color:            #fff;
+    border:           none;
+    cursor:           pointer;
+    background:       linear-gradient(135deg, var(--color-accent) 0%, #4f9fff 40%, var(--color-accent2) 100%);
+    background-size:  200% 100%;
+    box-shadow:       0 0 24px rgba(0, 210, 255, .22), 0 4px 14px rgba(0, 0, 0, .4);
+    position:         relative;
+    overflow:         hidden;
+    transition:       transform .18s, box-shadow .18s, background-position .3s, opacity .18s;
+}
+.btn-primary::before {
+    content:    '';
+    position:   absolute;
+    inset:      0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, .18) 0%, transparent 60%);
+    opacity:    0;
+    transition: opacity .18s;
+}
+.btn-primary:hover:not(:disabled) {
+    transform:         translateY(-2px);
+    box-shadow:        0 0 36px rgba(0, 210, 255, .32), 0 8px 22px rgba(0, 0, 0, .5);
+    background-position: 100% 0;
+}
+.btn-primary:hover:not(:disabled)::before { opacity: 1; }
+.btn-primary:active:not(:disabled)        { transform: translateY(0); }
+.btn-primary:disabled                     { opacity: .22; cursor: not-allowed; box-shadow: none; }
+
+/* ══════════════  BTN STOP  ══════════════════════════════════════ */
+.btn-stop {
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    gap:             8px;
+    padding:         9px 16px;
+    border-radius:   11px;
+    font-size:       var(--fs-base);
+    font-weight:     600;
+    border:          1px solid;
+    cursor:          pointer;
+    transition:      all .18s;
+}
+.btn-stop:disabled {
+    background:   rgba(239, 68, 68, .06);
+    border-color: rgba(239, 68, 68, .12);
+    color:        rgba(239, 68, 68, .3);
+    cursor:       not-allowed;
+    box-shadow:   none;
+}
+.btn-stop:not(:disabled) {
+    background:   rgba(239, 68, 68, .12);
+    border-color: rgba(239, 68, 68, .45);
+    color:        #fc8181;
+    box-shadow:   0 0 18px rgba(239, 68, 68, .14), inset 0 0 14px rgba(239, 68, 68, .05);
+}
+.btn-stop:not(:disabled):hover {
+    background:   rgba(239, 68, 68, .2);
+    border-color: rgba(239, 68, 68, .7);
+    color:        #fca5a5;
+    box-shadow:   0 0 28px rgba(239, 68, 68, .28), inset 0 0 16px rgba(239, 68, 68, .1);
+    transform:    translateY(-1px);
+}
+.btn-stop:not(:disabled):active { transform: translateY(0); }
+
+/* ══════════════  TAB BUTTON  ════════════════════════════════════ */
+.tab {
+    display:      flex;
+    align-items:  center;
+    gap:          6px;
+    padding:      7px 12px 8px;
+    font-size:    12.5px;
+    font-weight:  500;
+    color:        var(--color-text-muted);
+    background:   none;
+    border:       none;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px 8px 0 0;
+    cursor:       pointer;
+    white-space:  nowrap;
+    flex-shrink:  0;
+    transition:   color .15s, background .15s;
+    margin-bottom: -1px;
+}
+.tab:hover         { color: var(--color-text-dim); background: rgba(255, 255, 255, .03); }
+.tab.active        { color: var(--color-accent) !important; background: rgba(0, 210, 255, .06); border-bottom-color: var(--color-accent); }
+.tab.active svg    { filter: drop-shadow(0 0 4px rgba(0, 210, 255, .6)); }
+.tab.icon-only .tab-text { display: none; }
+.tab-badge-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--color-accent);
+    border-radius: 50%;
+    margin-left: 2px;
+    box-shadow: 0 0 6px var(--color-accent);
+    animation: dot-pulse-accent 1.5s infinite;
+    display: inline-block;
+}
+
+
+/* ══════════════  TOOLBAR BUTTON  ════════════════════════════════ */
+.toolbar-btn {
+    display:      inline-flex;
+    align-items:  center;
+    gap:          5px;
+    padding:      5px 10px;
+    background:   var(--color-card);
+    border:       1px solid var(--color-border);
+    border-radius: 7px;
+    color:        var(--color-text-dim);
+    font-size:    11.5px;
+    font-weight:  500;
+    cursor:       pointer;
+    white-space:  nowrap;
+    transition:   all .15s;
+}
+.toolbar-btn:hover          { border-color: var(--color-border-md); color: var(--color-text-d); background: var(--color-card-hover); }
+.toolbar-btn-active         { background: rgba(0, 210, 255, .08); border-color: rgba(0, 210, 255, .28); color: var(--color-accent); }
+.toolbar-btn-active:hover   { background: rgba(0, 210, 255, .13) !important; border-color: rgba(0, 210, 255, .45) !important; color: var(--color-accent) !important; }
+.toolbar-btn-active.off     { background: var(--color-card) !important; border-color: var(--color-border) !important; color: var(--color-text-muted) !important; opacity: .6; }
+.toolbar-btn-danger:hover   { background: rgba(239, 68, 68, .08) !important; border-color: rgba(239, 68, 68, .35) !important; color: #fc8181 !important; }
+
+/* ══════════════  BADGE / COUNT  ═════════════════════════════════ */
+.badge-count {
+    display:      inline-flex;
+    align-items:  center;
+    gap:          5px;
+    background:   rgba(0, 210, 255, .08);
+    color:        var(--color-accent);
+    border:       1px solid rgba(0, 210, 255, .18);
+    border-radius: 999px;
+    padding:      4px 10px;
+    font-size:    11.5px;
+    font-weight:  600;
+    flex-shrink:  0;
+}
+.badge-count.badge-active {
+    background:   rgba(34, 197, 94, .08);
+    color:        #4ade80;
+    border-color: rgba(34, 197, 94, .25);
+}
+.badge-count.badge-skipped {
+    background:   rgba(255, 255, 255, .04);
+    color:        var(--color-text-dim);
+    border-color: rgba(255, 255, 255, .08);
+}
+
+
+/* ══════════════  INLINE CODE  ══════════════════════════════════ */
+.inline-code {
+    background:    rgba(0, 210, 255, .08);
+    border:        1px solid rgba(0, 210, 255, .15);
+    padding:       1px 6px;
+    border-radius: 4px;
+    font-family:   var(--font-mono);
+    color:         var(--color-accent);
+    font-size:     10.5px;
+}
