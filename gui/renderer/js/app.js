@@ -11,6 +11,8 @@ import { deleteImageSilently, undoLastDelete, redoLastDelete, restoreImageFromTr
 import { toggleSidebar, setupResponsive, setupResizer } from './modules/sidebar.js';
 import { getFileName }              from './modules/utils.js';
 import { showConfirmModal }         from './modules/confirmModal.js';
+import { setupAccountManager }      from './modules/accountManager.js';
+import { setupSessionManager }      from './modules/sessionManager.js';
 
 const api = window.botAPI;
 
@@ -824,6 +826,22 @@ async function init() {
     applyGalleryViewMode(logToUI);
     updateProgressStats();
     switchTab('prompts');
+
+    // ── Expose helpers ke window agar accountManager.js bisa pakai ──
+    window._showToast = (msg, type) => showToast(msg, type);
+    window._showConfirm = (title, msg, actionLabel, type, cb) => {
+        showConfirmModal({
+            title, message: msg,
+            confirmLabel: actionLabel || 'Hapus',
+            type: type || 'danger',
+        }).then(cb);
+    };
+
+    // ── Setup Account Manager ──
+    await setupAccountManager();
+
+    // ── Setup Session Manager (Multi-Sesi) ──
+    await setupSessionManager();
 }
 
 document.addEventListener('DOMContentLoaded', init);

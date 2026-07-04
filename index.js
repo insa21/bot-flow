@@ -30,7 +30,7 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR
 const DOWNLOADS_TEMP_DIR = process.env.DOWNLOADS_TEMP_DIR
     ? path.resolve(process.env.DOWNLOADS_TEMP_DIR)
     : path.join(process.cwd(), 'tmp_downloads');
-const PROGRESS_FILE = path.join(OUTPUT_DIR, '.progress.json');
+const PROGRESS_FILE = path.join(OUTPUT_DIR, process.env.SESSION_ID ? `.progress_${process.env.SESSION_ID}.json` : '.progress.json');
 
 
 // Resolusi yang tersedia di Flow (sesuai screenshot)
@@ -43,7 +43,67 @@ const RESOLUTION_LABELS = {
 // ============================================================
 
 function randomDelay(min, max) {
-    return Math.floor(Math.random() * (max - min + 1) + min);
+    // Distribusi sedikit condong ke bawah agar terasa lebih natural
+    const r = Math.random();
+    return Math.floor(min + (max - min) * (r * r * 0.4 + r * 0.6));
+}
+
+/**
+ * Jeda tambahan acak dengan distribusi mendekati human reaction time.
+ * Gunakan saat butuh variasi timing yang tidak terlalu dapat diprediksi.
+ */
+async function humanPause(page, min = 300, max = 900) {
+    const ms = randomDelay(min, max);
+    try {
+        if (!page.isClosed()) await page.waitForTimeout(ms);
+    } catch {
+        await new Promise(r => setTimeout(r, ms));
+    }
+}
+
+/**
+ * Gerak mouse secara organik dari posisi saat ini ke target (x, y).
+ * Menggunakan kurva Bezier sederhana dengan beberapa titik perantara acak
+ * untuk meniru gerakan tangan manusia yang tidak pernah lurus sempurna.
+ */
+async function humanMove(page, targetX, targetY) {
+    try {
+        // Buat beberapa titik via (control points) secara acak
+        const steps = randomDelay(6, 12);
+        // Ambil posisi mouse saat ini via CDP (fallback ke tengah layar)
+        let startX = 640, startY = 400;
+        try {
+            const pos = await page.evaluate(() => ({ x: window._lastMouseX || 640, y: window._lastMouseY || 400 }));
+            startX = pos.x; startY = pos.y;
+        } catch { /* fallback */ }
+
+        // Control point acak untuk kurva
+        const cp1x = startX + (targetX - startX) * 0.25 + randomDelay(-60, 60);
+        const cp1y = startY + (targetY - startY) * 0.25 + randomDelay(-60, 60);
+        const cp2x = startX + (targetX - startX) * 0.75 + randomDelay(-40, 40);
+        const cp2y = startY + (targetY - startY) * 0.75 + randomDelay(-40, 40);
+
+        for (let step = 1; step <= steps; step++) {
+            const t = step / steps;
+            // Cubic bezier formula
+            const x = Math.round(
+                (1 - t) ** 3 * startX +
+                3 * (1 - t) ** 2 * t * cp1x +
+                3 * (1 - t) * t ** 2 * cp2x +
+                t ** 3 * targetX
+            );
+            const y = Math.round(
+                (1 - t) ** 3 * startY +
+                3 * (1 - t) ** 2 * t * cp1y +
+                3 * (1 - t) * t ** 2 * cp2y +
+                t ** 3 * targetY
+            );
+            await page.mouse.move(x, y);
+            await new Promise(r => setTimeout(r, randomDelay(8, 20)));
+        }
+        // Track posisi terakhir
+        await page.evaluate((pos) => { window._lastMouseX = pos.x; window._lastMouseY = pos.y; }, { x: targetX, y: targetY });
+    } catch { /* fallback graceful */ }
 }
 
 function killExistingChrome() {
@@ -146,32 +206,65 @@ async function launchBrowser() {
     await new Promise(r => setTimeout(r, 2000));
 
     const userDataDir = process.env.USER_DATA_DIR || './browser_session';
-    const isHeadless = process.env.HEADLESS === 'true';
+    const isHeadless  = process.env.HEADLESS === 'true';
 
-    log('Launching browser...');
+    // ── Deteksi Chrome asli yang terinstall di sistem ──────────────────────────
+    // Playwright bawaan menggunakan Chromium "testing build" yang langsung dikenali
+    // Google sebagai automation browser. Gunakan Chrome asli agar fingerprint cocok.
+    const CHROME_PATH = process.env.CHROME_EXECUTABLE_PATH
+        || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+
+    // ── Versi HARUS cocok dengan binary Chrome yang dijalankan ─────────────────
+    // Cek versi Chrome yang terinstall: 149.0.7827.156
+    const CHROME_VERSION  = '149.0.7827.156';
+    const CHROME_MAJOR    = '149';
+    const UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VERSION} Safari/537.36`;
+
+    log(`Launching Chrome ${CHROME_MAJOR} (real binary)...`);
+
     const context = await chromium.launchPersistentContext(userDataDir, {
+        // ── Gunakan Chrome asli, bukan Chromium Playwright ──
+        executablePath: CHROME_PATH,
         headless: isHeadless,
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        userAgent: UA,
         downloadsPath: DOWNLOADS_TEMP_DIR,
         acceptDownloads: true,
+        locale: 'en-US',
+        timezoneId: 'Asia/Jakarta',
         args: [
             '--start-maximized',
+            // ── Sembunyikan tanda otomasi ──
             '--disable-blink-features=AutomationControlled',
+            '--exclude-switches=enable-automation',
+            // ── Stabilitas ──
             '--no-sandbox',
-            '--disable-infobars',
             '--no-first-run',
             '--no-default-browser-check',
+            '--disable-default-apps',
             // ── Anti background-tab throttling ──
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-renderer-backgrounding',
             '--disable-ipc-flooding-protection',
             '--force-device-scale-factor=1',
+            // ── Kurangi noise & fingerprint ──
+            '--disable-features=TranslateUI,AutofillServerCommunication,Translate',
+            '--disable-infobars',
+            '--lang=en-US',
+            '--metrics-recording-only',
+            '--disable-breakpad',
         ],
+        // ── Header HTTP default agar mirip browser asli ──
+        extraHTTPHeaders: {
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        // ── Izinkan izin kamera/mik agar tidak ada prompt yang mengganggu ──
+        permissions: [],
     });
     return context;
 }
+
 
 async function waitForElement(page, selector, timeoutMs = 10000) {
     try {
@@ -205,6 +298,99 @@ async function resetFlowSession(page, existingInput, timeoutMs) {
     }
     log('Session is already clean, proceeding...');
     return existingInput;
+}
+
+/**
+ * Mengecek apakah Agen di Flow sedang aktif.
+ * Agen dianggap aktif jika:
+ * 1. Tombol "Petunjuk Agen" atau "Agent Instructions" terlihat.
+ * 2. Atau tombol Agen memiliki atribut/class aktif (seperti aria-pressed, dll.).
+ */
+async function checkIsAgentActive(page, timeoutMs = 1500) {
+    try {
+        // 1. Cek tombol "Petunjuk Agen" / "Agent Instructions"
+        const instructionsBtn = page.locator(
+            'button:has-text("Petunjuk Agen"), button:has-text("Agent Instructions")'
+        ).first();
+        if (await instructionsBtn.isVisible({ timeout: timeoutMs }).catch(() => false)) {
+            return true;
+        }
+
+        // 2. Cek status tombol toggle Agen itu sendiri
+        const agenBtn = page.locator(
+            'button:has-text("Agen"):not(:has-text("Petunjuk")), ' +
+            'button:has-text("Agent"):not(:has-text("Instructions"))'
+        ).first();
+        if (await agenBtn.isVisible({ timeout: timeoutMs }).catch(() => false)) {
+            const isActive = await agenBtn.evaluate(el => {
+                const ariaPressed = el.getAttribute('aria-pressed');
+                const ariaChecked = el.getAttribute('aria-checked');
+                const ariaExpanded = el.getAttribute('aria-expanded');
+                if (ariaPressed === 'true' || ariaChecked === 'true' || ariaExpanded === 'true') {
+                    return true;
+                }
+                const classList = Array.from(el.classList).map(c => c.toLowerCase());
+                const activeKeywords = ['active', 'selected', 'checked', 'pressed', 'enabled'];
+                return classList.some(cls => activeKeywords.some(keyword => cls.includes(keyword)));
+            }).catch(() => false);
+            if (isActive) {
+                return true;
+            }
+        }
+    } catch (err) {
+        log(`Error checking agent status: ${err.message}`, 'WARN');
+    }
+    return false;
+}
+
+/**
+ * Memastikan Agen dalam kondisi nonaktif (OFF).
+ * Jika aktif, klik tombol untuk mematikannya.
+ * Jika sudah nonaktif, jangan lakukan klik apa pun.
+ */
+async function ensureAgentOff(page, timeoutMs = 1500) {
+    log('Checking "Agent" status in main input area...');
+    const isActive = await checkIsAgentActive(page, timeoutMs);
+    if (isActive) {
+        log('Agent is active. Turning off...');
+        const agenBtn = page.locator(
+            'button:has-text("Agen"):not(:has-text("Petunjuk")), ' +
+            'button:has-text("Agent"):not(:has-text("Instructions"))'
+        ).first();
+        const agenVisible = await agenBtn.isVisible({ timeout: timeoutMs }).catch(() => false);
+
+        if (agenVisible) {
+            await agenBtn.click();
+            await page.waitForTimeout(1200);
+
+            // Handle modal konfirmasi "Agen Anda aktif" jika muncul
+            const okeBtn = page.locator('button:has-text("Oke"), button:has-text("OK")').first();
+            if (await okeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                log('  Confirmation modal → clicking "OK"...');
+                await okeBtn.click();
+                await page.waitForTimeout(1000);
+                // Klik Agen lagi untuk benar-benar off jika masih visible dan aktif
+                if (await checkIsAgentActive(page, 500)) {
+                    if (await agenBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+                        await agenBtn.click();
+                        await page.waitForTimeout(600);
+                    }
+                }
+            }
+            
+            // Verifikasi akhir
+            const stillActive = await checkIsAgentActive(page, 1000);
+            if (stillActive) {
+                log('⚠️  "Agent" button is still active after turn-off attempt!', 'WARN');
+            } else {
+                log('✅ "Agent" button turned off.');
+            }
+        } else {
+            log('⚠️  "Agent" button found active but toggle button is not visible to click.', 'WARN');
+        }
+    } else {
+        log('ℹ️  "Agent" button is already inactive (OFF). No click performed.');
+    }
 }
 
 // ── Buat proyek baru, tutup panel "Sesi tanpa judul", matikan Agen ──────────
@@ -318,50 +504,7 @@ async function setupNewProject(page) {
 
     // ── Langkah 3: Matikan tombol "Agen" di area input utama ───────────────────
     // Hanya lakukan SETELAH panel tertutup supaya tidak match tombol di dalam panel
-    log('Checking "Agent" button in main input area...');
-    await page.waitForTimeout(800);
-
-    try {
-        // Deteksi: Agen aktif jika ada tombol "Petunjuk Agen"
-        const isAgenActive = await page.locator(
-            'button:has-text("Petunjuk Agen"), button:has-text("Agent Instructions")'
-        ).first().isVisible({ timeout: 3000 }).catch(() => false);
-
-        // Tombol Agen toggle — pastikan bukan "Petunjuk Agen"
-        const agenBtn = page.locator(
-            'button:has-text("Agen"):not(:has-text("Petunjuk")), ' +
-            'button:has-text("Agent"):not(:has-text("Instructions"))'
-        ).first();
-        const agenVisible = await agenBtn.isVisible({ timeout: 3000 }).catch(() => false);
-
-        if (isAgenActive || agenVisible) {
-            log(isAgenActive ? 'Agent is active. Turning off...' : 'Agent button visible. Clicking...');
-
-            if (agenVisible) {
-                await agenBtn.click();
-                await page.waitForTimeout(1200);
-
-                // Handle modal konfirmasi "Agen Anda aktif" jika muncul
-                const okeBtn = page.locator('button:has-text("Oke"), button:has-text("OK")').first();
-                if (await okeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                    log('  Confirmation modal → clicking "OK"...');
-                    await okeBtn.click();
-                    await page.waitForTimeout(1000);
-                    // Klik Agen lagi untuk benar-benar off
-                    if (await agenBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                        await agenBtn.click();
-                        await page.waitForTimeout(600);
-                    }
-                }
-                log('✅ "Agent" button turned off.');
-            }
-        } else {
-            log('ℹ️  "Agent" button inactive or not found.');
-        }
-    } catch (err) {
-        log(`ℹ️  Failed to check Agent: ${err.message}`, 'WARN');
-    }
-
+    await ensureAgentOff(page, 3000);
     await page.waitForTimeout(500);
 }
 
@@ -376,27 +519,115 @@ async function waitForFlowReady(page, maxWaitMs = 60000) {
     return null;
 }
 
+/**
+ * Mengetik teks dengan pola yang lebih menyerupai manusia:
+ * - Delay per karakter 80–200ms (rata-rata manusia ~120ms)
+ * - Sesekali ada burst cepat (saat mengetik kata umum)
+ * - Sesekali ada micro-pause antar kata (50–300ms ekstra)
+ * - Tidak ada interval yang terlalu seragam
+ */
+async function humanType(page, text) {
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        // Karakter spasi/tanda baca → pause lebih lama (jeda berpikir antar kata)
+        let charDelay;
+        if (ch === ' ') {
+            charDelay = randomDelay(80, 220);
+            // 20% chance: micro-pause ekstra setelah spasi (seperti berpikir)
+            if (Math.random() < 0.20) charDelay += randomDelay(100, 400);
+        } else if (/[.,!?;:]/.test(ch)) {
+            charDelay = randomDelay(120, 300);
+        } else {
+            // Burst typing: 15% chance karakter sangat cepat (jari sudah posisi)
+            charDelay = Math.random() < 0.15 ? randomDelay(30, 80) : randomDelay(80, 180);
+        }
+        await page.keyboard.type(ch, { delay: 0 }); // type dulu
+        await new Promise(r => setTimeout(r, charDelay)); // baru delay
+    }
+}
+
 async function fillPromptInput(page, inputLocator, text) {
     const isContentEditable = await inputLocator.evaluate(el => el.contentEditable === 'true');
+
+    // Gerak mouse ke input secara natural sebelum klik
+    try {
+        const box = await inputLocator.boundingBox();
+        if (box) {
+            const targetX = Math.round(box.x + box.width * (0.3 + Math.random() * 0.4));
+            const targetY = Math.round(box.y + box.height * (0.3 + Math.random() * 0.4));
+            await humanMove(page, targetX, targetY);
+            await new Promise(r => setTimeout(r, randomDelay(80, 180)));
+        }
+    } catch { /* lanjut */ }
+
     await inputLocator.click();
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(randomDelay(200, 450));
 
     if (isContentEditable) {
         await page.keyboard.press('Control+a');
+        await page.waitForTimeout(randomDelay(80, 150));
         await page.keyboard.press('Delete');
-        await page.waitForTimeout(200);
-        await page.keyboard.type(text, { delay: randomDelay(20, 50) });
+        await page.waitForTimeout(randomDelay(150, 300));
+        await humanType(page, text);
     } else {
         await inputLocator.click({ clickCount: 3 });
+        await page.waitForTimeout(randomDelay(100, 200));
         await page.keyboard.press('Delete');
-        await page.waitForTimeout(200);
-        await inputLocator.pressSequentially(text, { delay: randomDelay(20, 50) });
+        await page.waitForTimeout(randomDelay(150, 300));
+        await humanType(page, text);
     }
 }
 
 /**
+ * Cek apakah Google Flow menampilkan pesan error kebijakan konten.
+ * Pesan yang dideteksi:
+ *  - "Pembuatan ini mungkin melanggar kebijakan kami" (ID)
+ *  - "This generation may violate our policies" (EN)
+ *  - Variasi teks error lain dari Flow
+ * Return: true jika error policy terdeteksi di DOM
+ */
+async function checkPolicyError(page) {
+    try {
+        // Teks spesifik dari Google Flow saat prompt melanggar kebijakan
+        // Tidak menggunakan kata generik seperti "Gagal" untuk menghindari false positive
+        const policyTexts = [
+            'melanggar kebijakan',           // ID: "mungkin melanggar kebijakan kami"
+            'violate our policies',           // EN: "may violate our policies"
+            'violates our policies',
+            'may violate',
+            'mungkin melanggar',
+            'Coba perintah lain',            // ID: tombol/teks "Coba perintah lain"
+            'Try a different prompt',         // EN versi tombol
+        ];
+
+        for (const text of policyTexts) {
+            // Cek via page.evaluate — paling akurat, cari teks visible di DOM
+            const foundInDom = await page.evaluate((searchText) => {
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+                let node;
+                while ((node = walker.nextNode())) {
+                    if (node.textContent.toLowerCase().includes(searchText.toLowerCase())) {
+                        // Pastikan parent element visible (bukan hidden/display:none)
+                        const parent = node.parentElement;
+                        if (parent && parent.offsetParent !== null) return true;
+                    }
+                }
+                return false;
+            }, text).catch(() => false);
+
+            if (foundInDom) return true;
+        }
+    } catch { /* page mungkin sudah tutup */ }
+    return false;
+}
+
+/**
  * Deteksi gambar baru via network response.
- * Return list elemen <img> baru yang muncul di DOM setelah generate.
+ * Return { found, newSrcs, policyBlocked }
  */
 function setupImageDetection(page, srcsBefore, maxWaitMs) {
     return new Promise((resolve) => {
@@ -410,12 +641,25 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
             log(`  Waiting for generation... ${elapsed}s`);
         }, 15000);
 
+        // ── Polling cek error kebijakan setiap 4 detik ──
+        // Jauh lebih cepat dari menunggu timeout (300 detik)
+        const policyCheckInterval = setInterval(async () => {
+            try {
+                if (page.isClosed()) return;
+                const isBlocked = await checkPolicyError(page);
+                if (isBlocked) {
+                    log('  🚫 Policy violation detected! Skipping this prompt...', 'WARN');
+                    done(false, true);
+                }
+            } catch { /* abaikan */ }
+        }, 4000);
+
         // ── KeepAlive: setiap 20s bring tab ke depan + emit fake activity ──
         // Ini mencegah Flow berhenti generate saat tab di-background
         const keepAliveInterval = setInterval(async () => {
             try {
                 if (page.isClosed()) {
-                    done(false);
+                    done(false, false);
                     return;
                 }
                 await page.bringToFront();
@@ -426,25 +670,29 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
 
         const closeHandler = () => {
             log('  ⚡ Page was closed during image detection!', 'WARN');
-            done(false);
+            done(false, false);
         };
         page.on('close', closeHandler);
 
-        const done = (found) => {
+        let settled = false;
+        const done = (found, blocked = false) => {
+            if (settled) return;
+            settled = true;
             clearTimeout(batchTimer);
             clearTimeout(globalTimer);
             clearInterval(progressInterval);
             clearInterval(keepAliveInterval);
+            clearInterval(policyCheckInterval);
             try {
                 page.off('close', closeHandler);
                 page.off('response', responseHandler);
             } catch { /* page already closed */ }
-            resolve({ found, newSrcs: found ? collectedUrls : [] });
+            resolve({ found, newSrcs: found ? collectedUrls : [], policyBlocked: blocked });
         };
 
         const globalTimer = setTimeout(() => {
             log('  ⏱️ Timeout waiting for images from server.');
-            done(false);
+            done(false, false);
         }, maxWaitMs);
 
         const responseHandler = (response) => {
@@ -458,7 +706,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
                     collectedUrls.push(url);
                     log(`  📸 Image ${collectedUrls.length} detected via network!`);
                     clearTimeout(batchTimer);
-                    batchTimer = setTimeout(() => done(true), 2000);
+                    batchTimer = setTimeout(() => done(true, false), 2000);
                 }
             } catch { /* abaikan */ }
         };
@@ -508,9 +756,19 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         await restoreWindow(page);
         await page.bringToFront();
         log('  🖱️  Right click on image...');
+        // Gerak mouse ke gambar secara organik sebelum klik kanan
+        try {
+            const box = await imgLocator.boundingBox();
+            if (box) {
+                const tx = Math.round(box.x + box.width  * (0.25 + Math.random() * 0.5));
+                const ty = Math.round(box.y + box.height * (0.25 + Math.random() * 0.5));
+                await humanMove(page, tx, ty);
+                await new Promise(r => setTimeout(r, randomDelay(100, 250)));
+            }
+        } catch { /* lanjut */ }
         await imgLocator.click({ button: 'right' });
-        // Tunggu context menu muncul
-        await page.waitForTimeout(800);
+        // Tunggu context menu muncul (variasi timing natural)
+        await page.waitForTimeout(randomDelay(600, 1100));
 
         // ── Langkah 2: Cari item "Download" di context menu dengan selector yang lebih presisi ──
         // Urutan selector dari yang paling spesifik ke paling umum
@@ -561,9 +819,18 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
 
         // ── Langkah 3: Hover item "Download" untuk memunculkan submenu resolusi ──
         log('  🖱️  Hovering over "Download" to open resolution submenu...');
+        // Gerak mouse ke item Download secara organik
+        try {
+            const box = await downloadMenuItem.boundingBox();
+            if (box) {
+                const tx = Math.round(box.x + box.width  * (0.2 + Math.random() * 0.6));
+                const ty = Math.round(box.y + box.height * (0.2 + Math.random() * 0.6));
+                await humanMove(page, tx, ty);
+            }
+        } catch { /* fallback ke hover biasa */ }
         await downloadMenuItem.hover({ force: true });
-        // Tunggu submenu muncul — Flow butuh ~500-1000ms render submenu
-        await page.waitForTimeout(1000);
+        // Tunggu submenu muncul — variasi natural
+        await page.waitForTimeout(randomDelay(700, 1300));
 
         // ── Langkah 4: Cari dan klik opsi resolusi target (misal "2K") ──
         log(`  🔍 Searching for resolution option "${imageSize.toUpperCase()}" in submenu...`);
@@ -652,8 +919,21 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         if (resolvedDownloadUrl) {
             try {
                 log(`  🔗 Fetching file from: ${resolvedDownloadUrl.substring(0, 80)}...`);
+                // Header lengkap menyerupai browser Chrome asli
                 const resp = await page.request.get(resolvedDownloadUrl, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.156 Safari/537.36',
+                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'sec-ch-ua': '"Google Chrome";v="149", "Chromium";v="149", "Not/A)Brand";v="99"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-platform': '"Windows"',
+                        'sec-fetch-dest': 'image',
+                        'sec-fetch-mode': 'no-cors',
+                        'sec-fetch-site': 'cross-site',
+                        'Referer': 'https://labs.google/',
+                    },
                     timeout: downloadTimeout,
                 });
                 if (resp.ok()) {
@@ -900,16 +1180,78 @@ async function isPageAlive(page) {
 async function setupPage(context, timeoutMs) {
     const page = await context.newPage();
 
+    // ── Anti-detection: script diinjeksi SEBELUM halaman apapun load ──
     await page.addInitScript(() => {
-        // Anti-detection: sembunyikan webdriver
+        // 1. Sembunyikan webdriver flag
+        //    Chrome asli tidak pernah mengekspos ini, tapi Playwright menambahkannya
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 
-        // ── Spoof Page Visibility API ──
-        // Agar Flow tidak tahu tab sedang di-background dan tidak berhenti generate
-        Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
-        Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
-        // Blokir event visibilitychange agar Flow tidak merespons tab switch
+        // 2. Hapus jejak CDP/Playwright
+        //    Playwright mengekspos variabel window ini yang bisa dideteksi Google
+        try {
+            const pwVars = Object.getOwnPropertyNames(window).filter(k =>
+                k.startsWith('cdc_') || k.startsWith('__playwright') || k.startsWith('__pw_')
+            );
+            pwVars.forEach(v => {
+                try { delete window[v]; } catch { Object.defineProperty(window, v, { get: () => undefined }); }
+            });
+        } catch { /* abaikan */ }
+
+        // 3. window.chrome — JANGAN di-spoof jika Chrome asli sudah ada
+        //    Chrome asli sudah punya window.chrome native yang benar.
+        //    Overwrite justru jadi sinyal deteksi karena property-nya berbeda.
+        //    Hanya tambahkan jika benar-benar tidak ada (fallback untuk Chromium).
+        if (!window.chrome || !window.chrome.runtime) {
+            window.chrome = window.chrome || {};
+            window.chrome.runtime = window.chrome.runtime || {
+                id: undefined,
+                connect: () => {},
+                sendMessage: () => {},
+                onMessage: { addListener: () => {}, removeListener: () => {} },
+            };
+        }
+
+        // 4. navigator.plugins — Chrome asli sudah punya plugins nyata.
+        //    Hanya tambahkan fallback jika kosong (Chromium headless).
+        if (navigator.plugins.length === 0) {
+            const fakePlugins = [
+                { name: 'Chrome PDF Plugin',      filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                { name: 'Chrome PDF Viewer',      filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                { name: 'Native Client',          filename: 'internal-nacl-plugin', description: '' },
+            ];
+            const pluginArray = fakePlugins.map(p => {
+                const plugin = Object.create(Plugin.prototype);
+                Object.defineProperty(plugin, 'name',        { get: () => p.name });
+                Object.defineProperty(plugin, 'filename',    { get: () => p.filename });
+                Object.defineProperty(plugin, 'description', { get: () => p.description });
+                Object.defineProperty(plugin, 'length',      { get: () => 0 });
+                return plugin;
+            });
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => Object.assign(pluginArray, {
+                    item:      (i) => pluginArray[i],
+                    namedItem: (n) => pluginArray.find(p => p.name === n),
+                    length:    pluginArray.length,
+                }),
+            });
+        }
+
+        // 5. Bahasa — pastikan konsisten dengan extraHTTPHeaders
+        try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] }); } catch {}
+        try { Object.defineProperty(navigator, 'language',  { get: () => 'en-US' }); } catch {}
+
+        // 6. Spoof Page Visibility API — Flow tidak throttle saat tab di-background
+        try {
+            Object.defineProperty(document, 'hidden',          { get: () => false, configurable: true });
+            Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+        } catch {}
         document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+
+        // 7. Track posisi mouse untuk humanMove()
+        document.addEventListener('mousemove', (e) => {
+            window._lastMouseX = e.clientX;
+            window._lastMouseY = e.clientY;
+        }, { passive: true });
     });
 
     // Paksa page tetap di depan agar interaksi UI tidak di-throttle
@@ -1046,6 +1388,10 @@ async function runAutomation() {
                     // Restore window jika minimized + bringToFront sebelum ketik prompt
                     await restoreWindow(page);
                     await page.bringToFront();
+                    
+                    // Pastikan Agen selalu nonaktif (OFF)
+                    await ensureAgentOff(page, 1000);
+
                     await fillPromptInput(page, promptInput, prompt);
                     await page.waitForTimeout(randomDelay(400, 700));
 
@@ -1055,7 +1401,25 @@ async function runAutomation() {
                     await page.keyboard.press('Enter');
                     log('  Generation started...');
 
-                    const { found: resultFound, newSrcs } = await detectionPromise;
+                    const { found: resultFound, newSrcs, policyBlocked } = await detectionPromise;
+
+                    // ── Jika Google Flow memblokir prompt karena kebijakan konten ──
+                    if (policyBlocked) {
+                        log(`  🚫 Prompt blocked by Google policy. Skipping...\n`, 'WARN');
+                        // Catat prompt yang diblokir ke file
+                        const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                        const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
+                        try {
+                            if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                            fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                            log(`  📝 Blocked prompt saved to failed/policy_blocked.txt`);
+                        } catch { /* abaikan */ }
+                        // Tandai sebagai "selesai" agar tidak diulang saat resume
+                        completed.add(prompt);
+                        saveProgress(completed);
+                        success = true; // keluar dari retry loop
+                        break;
+                    }
 
                     const timestamp = Date.now();
                     const safeName = prompt.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 40);
@@ -1075,6 +1439,21 @@ async function runAutomation() {
                             log(`  ⚠️  Download ${imageSize.toUpperCase()} failed (attempt ${attempt}), retrying...\n`, 'WARN');
                         }
                     } else {
+                        // Cek sekali lagi secara sinkron sebelum declare timeout
+                        const finalCheck = await checkPolicyError(page);
+                        if (finalCheck) {
+                            log(`  🚫 Policy error confirmed on final check. Skipping prompt...\n`, 'WARN');
+                            const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                            const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
+                            try {
+                                if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                                fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                            } catch { /* abaikan */ }
+                            completed.add(prompt);
+                            saveProgress(completed);
+                            success = true;
+                            break;
+                        }
                         log(`  ⚠️  Timeout on attempt ${attempt} — no images detected.\n`, 'WARN');
                     }
 
@@ -1108,10 +1487,17 @@ async function runAutomation() {
                 log(`❌ Prompt "${prompt.substring(0, 40)}" failed after ${maxRetries} attempts.\n`, 'ERROR');
             }
 
-            // Jeda antar prompt
+            // Jeda antar prompt — durasi lebih lama dan natural (meniru jeda berpikir manusia)
             if (i < pending.length - 1) {
-                const gap = randomDelay(2000, 4000);
-                log(`Delay ${Math.round(gap / 1000)}s...`);
+                // Basis: 8–20 detik. Setiap 5 prompt: tambah 10–30 detik "break panjang"
+                let gap = randomDelay(8000, 20000);
+                if ((i + 1) % 5 === 0) {
+                    const longBreak = randomDelay(10000, 30000);
+                    log(`☕ Taking a longer break (${Math.round((gap + longBreak) / 1000)}s after ${i + 1} prompts)...`);
+                    gap += longBreak;
+                } else {
+                    log(`Delay ${Math.round(gap / 1000)}s before next prompt...`);
+                }
                 try { await page.waitForTimeout(gap); } catch { await new Promise(r => setTimeout(r, gap)); }
             }
         }

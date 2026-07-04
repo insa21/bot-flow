@@ -238,7 +238,7 @@ export function selectImage(filePath, event) {
     const name = getFileName(previewPath);
 
     if (previewImg) {
-        previewImg.src = `file://${previewPath.replace(/\\/g, '/')}`;
+        previewImg.src = `file:///${previewPath.replace(/\\/g, '/')}`;
         previewImg.classList.remove('hidden');
         previewImg.classList.remove('opacity-100');
         previewImg.onload = () => previewImg.classList.add('opacity-100');
@@ -297,7 +297,7 @@ async function updateInspector(filePath) {
         const thumbEl = document.getElementById('inspector-thumb');
         const placeholderEl = document.getElementById('inspector-thumb-placeholder');
         if (thumbEl && selectedImages[0]) {
-            thumbEl.src = `file://${selectedImages[0].replace(/\\/g, '/')}`;
+            thumbEl.src = `file:///${selectedImages[0].replace(/\\/g, '/')}`;
             thumbEl.classList.remove('hidden');
             if (placeholderEl) placeholderEl.classList.add('hidden');
         }
@@ -342,7 +342,7 @@ async function updateInspector(filePath) {
     const thumbEl = document.getElementById('inspector-thumb');
     const placeholderEl = document.getElementById('inspector-thumb-placeholder');
     if (thumbEl) {
-        thumbEl.src = `file://${filePath.replace(/\\/g, '/')}`;
+        thumbEl.src = `file:///${filePath.replace(/\\/g, '/')}`;
         thumbEl.classList.remove('hidden');
     }
     if (placeholderEl) {
@@ -365,7 +365,7 @@ async function updateInspector(filePath) {
         const dimEl = document.getElementById('inspector-val-dimensions');
         if (dimEl) dimEl.textContent = '—';
     };
-    tempImg.src = `file://${filePath.replace(/\\/g, '/')}`;
+    tempImg.src = `file:///${filePath.replace(/\\/g, '/')}`;
 
     // Get async stats (size, dates)
     try {
@@ -807,7 +807,7 @@ function createThumbnail(filePath, viewMode, openLightbox, deleteImageSilently, 
 
     // Image
     const img = document.createElement('img');
-    img.dataset.src = `file://${filePath.replace(/\\/g, '/')}`;
+    img.dataset.src = `file:///${filePath.replace(/\\/g, '/')}`;
     img.alt = name;
     img.loading = 'lazy';
 

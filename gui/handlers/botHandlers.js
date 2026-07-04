@@ -5,6 +5,7 @@ const path   = require('path');
 const fs     = require('fs');
 const { spawn } = require('child_process');
 const { writeEnv, writePrompts, OUTPUT_DIR, CONFIG_ROOT, APP_PATH } = require('./windowHandlers');
+const { getActiveSessionDir, getActiveAccount, SESSIONS_DIR }       = require('./accountHandlers');
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let botProcess   = null;
@@ -79,6 +80,19 @@ function setupBotHandlers(ipcMain, win) {
             const outDir = outputDir || OUTPUT_DIR;
             if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
+            // ── Tentukan USER_DATA_DIR: akun aktif atau fallback browser_session ──
+            const activeSessionDir = getActiveSessionDir();
+            const userDataDir = activeSessionDir
+                ? activeSessionDir
+                : path.join(CONFIG_ROOT, 'browser_session');
+
+            // Pastikan folder sesi ada
+            if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
+
+            const activeAccount = getActiveAccount();
+            const accountLabel  = activeAccount?.email || activeAccount?.name || 'default';
+            sendLog(win, `[GUI] 👤 Akun aktif: ${accountLabel}`);
+
             const envConfig = {
                 HEADLESS: config.headless ? 'true' : 'false',
                 IMAGE_SIZE: config.imageSize || '2k',
@@ -86,7 +100,7 @@ function setupBotHandlers(ipcMain, win) {
                 MAX_RETRIES: config.maxRetries || '3',
                 CONTEXT_MENU_TIMEOUT_MS: config.ctxTimeout || '15000',
                 DOWNLOAD_TIMEOUT_MS: config.dlTimeout || '300000',
-                USER_DATA_DIR: path.join(CONFIG_ROOT, 'browser_session'),
+                USER_DATA_DIR: userDataDir,
                 OUTPUT_DIR: outDir,
             };
             writeEnv(envConfig);
@@ -98,7 +112,13 @@ function setupBotHandlers(ipcMain, win) {
             startOutputWatcher(win, outDir);
 
             const isPackaged = !process.defaultApp && !/node_modules[\\/]electron[\\/]/.test(process.execPath);
-            const botPath = path.join(APP_PATH, 'index.js');
+            let botPath = path.join(APP_PATH, 'index.js');
+            if (!fs.existsSync(botPath)) {
+                const parentBotPath = path.join(APP_PATH, '..', 'index.js');
+                if (fs.existsSync(parentBotPath)) {
+                    botPath = parentBotPath;
+                }
+            }
 
             const botEnv = {
                 ...process.env,
@@ -106,7 +126,10 @@ function setupBotHandlers(ipcMain, win) {
                 LOG_DIR: path.join(CONFIG_ROOT, 'logs'),
                 DOWNLOADS_TEMP_DIR: path.join(CONFIG_ROOT, 'tmp_downloads'),
                 PROMPTS_PATH: path.join(CONFIG_ROOT, 'prompts.txt'),
-                DOTENV_CONFIG_PATH: path.join(CONFIG_ROOT, '.env')
+                DOTENV_CONFIG_PATH: path.join(CONFIG_ROOT, '.env'),
+                // Pastikan path Chrome asli diteruskan ke bot process
+                CHROME_EXECUTABLE_PATH: process.env.CHROME_EXECUTABLE_PATH
+                    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
             };
 
             if (isPackaged) {

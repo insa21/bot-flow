@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: file:; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;" />
-    <title>Flow Bot — Control Panel</title>
+    <title>Flow Bot â€” Control Panel</title>
     <!-- Google Fonts: load via <link> agar bekerja di Electron -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -48,7 +48,7 @@
 
 <body class="app-body">
 
-    <!-- ═══════════════════════  TITLEBAR  ═══════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•  TITLEBAR  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div id="titlebar">
 
         <!-- Sidebar toggle -->
@@ -103,10 +103,10 @@
         </div>
     </div>
 
-    <!-- ═══════════════════════  LAYOUT  ═══════════════════════ -->
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•  LAYOUT  â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div id="layout">
 
-        <!-- ─────────────  LEFT SIDEBAR  ───────────── -->
+        <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  LEFT SIDEBAR  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
         <aside id="sidebar">
 
             <!-- Status Card -->
@@ -288,7 +288,38 @@
                     </div>
                 </section>
 
+                <!-- â•â•â• ACCOUNT MANAGER â•â•â• -->
+                <section class="sidebar-section" id="section-accounts">
+                    <div class="section-header">
+                        <span class="section-icon">
+                            <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </span>
+                        <h2 class="section-title">Akun Google</h2>
+                    </div>
+
+                    <!-- Daftar akun -->
+                    <div id="account-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+
+                    <!-- Tombol tambah akun -->
+                    <button id="btn-add-account" class="link-btn" style="width:100%;justify-content:center;gap:6px;padding:7px 0;border:1px dashed rgba(255,255,255,0.12);border-radius:8px;font-size:11px;color:var(--text-dim,#8896aa);transition:all .2s;">
+                        <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="16"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                        </svg>
+                        Tambah Akun Google
+                    </button>
+                    <p id="account-login-hint" style="display:none;font-size:10px;color:#8896aa;margin-top:6px;line-height:1.5;text-align:center;">
+                        Jendela login akan terbuka.<br>Login ke akun Google Anda lalu tunggu redirect ke Flow.
+                    </p>
+                </section>
+
             </div><!-- end sidebar-sections -->
+
 
             <!-- Action Buttons -->
             <div id="action-btns">
@@ -311,7 +342,7 @@
         <!-- Sidebar Resizer drag handle -->
         <div id="sidebar-resizer"></div>
 
-        <!-- ─────────────  MAIN AREA  ───────────── -->
+        <!-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  MAIN AREA  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
         <main id="main-area">
 
             <!-- Tab Bar -->
@@ -349,9 +380,122 @@
                     </svg>
                     <span class="tab-text">Gallery</span>
                 </button>
+                <button class="tab" data-tab="sessions" id="tab-btn-sessions">
+                    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="14" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="2" y="13" width="8" height="8" rx="1.5"/>
+                        <rect x="14" y="13" width="8" height="8" rx="1.5"/>
+                    </svg>
+                    <span class="tab-text">Multi-Session</span>
+                    <span class="tab-badge" id="sessions-running-badge" style="display:none;"></span>
+                </button>
             </div>
 
-            <!-- ══════════  PROMPTS TAB  ══════════ -->
+            <!-- â•â•â•â•â•â•â•â•â•â•  SESSIONS TAB  â•â•â•â•â•â•â•â•â•â• -->
+            <div id="tab-sessions" class="tab-content">
+
+                <!-- Toolbar -->
+                <div class="tab-toolbar" style="flex-wrap:wrap;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
+                        <span style="font-size:11px;font-weight:600;color:var(--color-text-d,#e8eaf0);white-space:nowrap;">Sesi Paralel</span>
+                        <span id="sessions-count-badge" style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.06);color:#8896aa;white-space:nowrap;">0 sessions</span>
+                        
+                        <!-- Search input for categories -->
+                        <div class="relative" style="width:160px;flex-shrink:0;">
+                            <input type="text" id="session-search-input" placeholder="Cari kategori, user, status..." style="width:100%;padding:4px 8px 4px 24px;font-size:11px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:#e8eaf0;outline:none;transition:border-color .15s;" />
+                            <span style="position:absolute;left:8px;top:7px;color:#8896aa;line-height:1;display:flex;align-items:center;">
+                                <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="toolbar-group" style="gap:6px;">
+                        <!-- Auto-split dari prompts tab -->
+                        <button id="btn-split-prompts" class="toolbar-btn" title="Split prompts from Prompts tab evenly across all sessions">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                            </svg>
+                            <span>Split Prompts</span>
+                        </button>
+                        <button id="btn-session-start-all" class="toolbar-btn" style="color:#4ade80;border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.07);">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+                            </svg>
+                            <span>Start All</span>
+                        </button>
+                        <button id="btn-session-stop-all" class="toolbar-btn toolbar-btn-danger">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/>
+                            </svg>
+                            <span>Stop All</span>
+                        </button>
+                        <button id="btn-show-all-logs" class="toolbar-btn" style="color:#fbbf24;border-color:rgba(251,191,36,.25);background:rgba(251,191,36,.07);" title="Lihat riwayat aktivitas dari semua sesi/kategori">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9M3 20h3M3 12h18M3 4h18"/>
+                            </svg>
+                            <span>Activity Log</span>
+                        </button>
+                        <button id="btn-add-session" class="toolbar-btn" style="color:#60a5fa;border-color:rgba(96,165,250,.25);background:rgba(96,165,250,.07);">
+                            <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="16"/>
+                                <line x1="8" y1="12" x2="16" y2="12"/>
+                            </svg>
+                            <span>+ Add Session</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Session Cards Container -->
+                <!-- Global Session Stats (Apple Lined Design) -->
+                <div id="sessions-global-stats" class="px-4 py-3 border-b border-white/5 bg-white/[0.005] flex gap-4 items-center flex-wrap select-none">
+                    <!-- Stat 1: Running Sessions -->
+                    <div class="flex-1 min-w-[120px] bg-white/[0.01] border border-white/5 rounded-xl p-3 flex flex-col gap-1">
+                        <span class="text-[9px] font-bold text-text-dim uppercase tracking-wider">Active Sessions</span>
+                        <div class="flex items-baseline gap-2">
+                            <span id="stat-active-sessions" class="text-lg font-bold text-text-d">0</span>
+                            <span class="text-xs text-text-dim">/ <span id="stat-total-sessions">0</span></span>
+                        </div>
+                    </div>
+                    <!-- Stat 2: Total Completed prompts -->
+                    <div class="flex-grow-[2] min-w-[200px] bg-white/[0.01] border border-white/5 rounded-xl p-3 flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[9px] font-bold text-text-dim uppercase tracking-wider">Total Prompt Progress</span>
+                            <span id="stat-global-progress-txt" class="text-xs font-semibold text-[#00d2ff]">0 / 0</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div id="stat-global-progress-fill" class="h-full bg-gradient-to-r from-accent to-[#00d2ff] w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+                    <!-- Stat 3: ETA / Speed -->
+                    <div class="flex-1 min-w-[140px] bg-white/[0.01] border border-white/5 rounded-xl p-3 flex flex-col gap-1">
+                        <span class="text-[9px] font-bold text-text-dim uppercase tracking-wider">Estimated Time (ETA)</span>
+                        <span id="stat-global-eta" class="text-sm font-bold text-[#fbbf24]">—</span>
+                    </div>
+                </div>
+
+                <div id="sessions-container" style="padding:12px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1;"></div>
+
+                <!-- Empty State -->
+                <div id="sessions-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:16px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="48" height="48" stroke="rgba(255,255,255,0.15)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="14" y="3" width="8" height="8" rx="1.5"/>
+                        <rect x="2" y="13" width="8" height="8" rx="1.5"/>
+                        <rect x="14" y="13" width="8" height="8" rx="1.5"/>
+                    </svg>
+                    <div style="text-align:center;">
+                        <p style="font-size:13px;font-weight:600;color:#8896aa;margin:0 0 6px;">No parallel sessions yet</p>
+                        <p style="font-size:11px;color:#6e7a90;margin:0;line-height:1.6;">Click <strong style="color:#60a5fa;">+ Add Session</strong> to create a new session.<br>Each session runs with a different Google account concurrently.</p>
+                    </div>
+                    <button id="btn-add-session-empty" class="btn-primary" style="margin-top:4px;padding:8px 20px;font-size:12px;">
+                        + Add First Session
+                    </button>
+                </div>
+
+            </div><!-- end tab-sessions -->
+
+            <!-- â•â•â•â•â•â•â•â•â•â•  PROMPTS TAB  â•â•â•â•â•â•â•â•â•â• -->
             <div id="tab-prompts" class="tab-content active">
                 <div class="tab-toolbar">
                     <div class="flex gap-2">
@@ -380,8 +524,8 @@
                                 </svg>
                             </span>
                             <div class="search-nav-btns hidden" id="prompt-search-nav">
-                                <button id="btn-prompt-search-prev" class="search-nav-btn" title="Previous match">▲</button>
-                                <button id="btn-prompt-search-next" class="search-nav-btn" title="Next match">▼</button>
+                                <button id="btn-prompt-search-prev" class="search-nav-btn" title="Previous match">â–²</button>
+                                <button id="btn-prompt-search-next" class="search-nav-btn" title="Next match">â–¼</button>
                                 <span id="prompt-search-index" class="search-index-label">0/0</span>
                             </div>
                         </div>
@@ -409,11 +553,11 @@
                     <div id="prompts-highlight" class="prompts-highlight"></div>
                     <textarea id="prompts-textarea"
                         spellcheck="false"
-                        placeholder="Educational content social media showcase.&#10;Podcast promotion social media collection.&#10;# This is a comment — ignored by bot"></textarea>
+                        placeholder="Educational content social media showcase.&#10;Podcast promotion social media collection.&#10;# This is a comment â€” ignored by bot"></textarea>
                 </div>
             </div>
 
-            <!-- ══════════  DASHBOARD / PROGRESS TAB  ══════════ -->
+            <!-- â•â•â•â•â•â•â•â•â•â•  DASHBOARD / PROGRESS TAB  â•â•â•â•â•â•â•â•â•â• -->
             <div id="tab-progress" class="tab-content">
 
                 <!-- Stat Cards -->
@@ -494,7 +638,7 @@
                         <span class="cpb-dot"></span>
                         <span class="processing-eyebrow">Currently Processing</span>
                     </div>
-                    <div id="current-prompt-text" class="current-prompt-text">Idle — Waiting to start...</div>
+                    <div id="current-prompt-text" class="current-prompt-text">Idle â€” Waiting to start...</div>
                 </div>
 
                 <!-- Queue -->
@@ -505,7 +649,7 @@
                 <div id="prompt-queue-list" class="prompt-queue-list"></div>
             </div>
 
-            <!-- ══════════  LOG TAB  ══════════ -->
+            <!-- â•â•â•â•â•â•â•â•â•â•  LOG TAB  â•â•â•â•â•â•â•â•â•â• -->
             <div id="tab-log" class="tab-content">
                 <div class="tab-toolbar">
                     <span id="log-line-count" class="badge-count">
@@ -616,7 +760,7 @@
                 </div>
             </div>
 
-            <!-- ══════════  GALLERY TAB  ══════════ -->
+            <!-- â•â•â•â•â•â•â•â•â•â•  GALLERY TAB  â•â•â•â•â•â•â•â•â•â• -->
             <div id="tab-gallery" class="tab-content flex-col flex-1 overflow-hidden gap-3 p-3.5">
                 <!-- Gallery Header Toolbar -->
                 <div class="flex flex-wrap items-center justify-between flex-shrink-0 gap-x-3 gap-y-2 px-4 py-2 bg-[#0c0f1a] border border-white/5 rounded-lg backdrop-blur-md">
@@ -830,19 +974,19 @@
                             <div class="text-[9px] font-bold uppercase text-text-muted mb-3 tracking-wider">Information</div>
                             <div class="grid grid-cols-[75px_1fr] gap-x-3 gap-y-2.5 text-xs">
                                 <div class="text-text-dim text-right font-sans">Size</div>
-                                <div id="inspector-val-size" class="text-text-d font-sans">—</div>
+                                <div id="inspector-val-size" class="text-text-d font-sans">â€”</div>
 
                                 <div class="text-text-dim text-right font-sans">Dimensions</div>
-                                <div id="inspector-val-dimensions" class="text-text-d font-sans">—</div>
+                                <div id="inspector-val-dimensions" class="text-text-d font-sans">â€”</div>
 
                                 <div class="text-text-dim text-right font-sans">Created</div>
-                                <div id="inspector-val-created" class="text-text-d font-sans">—</div>
+                                <div id="inspector-val-created" class="text-text-d font-sans">â€”</div>
 
                                 <div class="text-text-dim text-right font-sans">Modified</div>
-                                <div id="inspector-val-modified" class="text-text-d font-sans">—</div>
+                                <div id="inspector-val-modified" class="text-text-d font-sans">â€”</div>
 
                                 <div class="text-text-dim text-right font-sans">Where</div>
-                                <div id="inspector-val-where" class="text-accent text-[10px] font-mono cursor-pointer underline break-all opacity-85 hover:opacity-100 transition-opacity" title="Click to copy path">—</div>
+                                <div id="inspector-val-where" class="text-accent text-[10px] font-mono cursor-pointer underline break-all opacity-85 hover:opacity-100 transition-opacity" title="Click to copy path">â€”</div>
                             </div>
                         </div>
 
@@ -1000,7 +1144,143 @@
         </div>
     </div>
 
+    <!-- â•â•â•â•â•â•â•â•â•â•  ACTIVITY LOG SLIDE-OVER DRAWER (Apple-Style)  â•â•â•â•â•â•â•â•â•â• -->
+    <div id="sess-log-backdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[10009] opacity-0 transition-opacity duration-300"></div>
+
+    <div id="sess-log-drawer" class="hidden fixed inset-y-0 right-0 w-[650px] max-w-full bg-[#0a0c16]/95 border-l border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] z-[10010] flex flex-col transition-transform duration-300 translate-x-full backdrop-blur-md">
+        
+        <!-- Drawer Header -->
+        <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
+            <div class="flex items-center gap-3">
+                <span class="p-2 rounded-lg bg-[#fbbf24]/10 text-[#fbbf24] border border-[#fbbf24]/20">
+                    <svg viewBox="0 0 24 24" fill="none" width="16" height="16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9M3 20h3M3 12h18M3 4h18"/>
+                    </svg>
+                </span>
+                <div>
+                    <h3 class="text-sm font-semibold text-text-d">Parallel Activity Log</h3>
+                    <p class="text-[10px] text-text-dim">Activity history, status, and events across all bot categories</p>
+                </div>
+            </div>
+            <button id="btn-close-log-drawer" class="w-8 h-8 rounded-lg flex items-center justify-center border border-white/5 hover:border-white/10 hover:bg-white/5 transition-all text-[#8896aa] hover:text-white cursor-pointer">
+                <svg viewBox="0 0 24 24" fill="none" width="14" height="14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Toolbar Group (Line Count & Actions) -->
+        <div class="px-6 py-3 border-b border-white/10 bg-white/[0.01] flex items-center justify-between flex-shrink-0">
+            <span id="sess-log-line-count" class="badge-count text-[11px] font-mono text-[#8e8e93] bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                0 lines
+            </span>
+            <div class="flex gap-2">
+                <button id="btn-sess-autoscroll" class="toolbar-btn toolbar-btn-active flex items-center gap-1.5" title="Toggle Auto-Scroll" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="5" y="2" width="14" height="20" rx="7" />
+                        <line x1="12" y1="6" x2="12" y2="10" stroke-width="2.5" />
+                    </svg>
+                    <span>Auto</span>
+                </button>
+                <button id="btn-sess-clear-log" class="toolbar-btn toolbar-btn-danger flex items-center gap-1.5" title="Clear Logs" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    <span>Clear</span>
+                </button>
+                <button id="btn-sess-copy-log" class="toolbar-btn flex items-center gap-1.5" title="Copy logs to clipboard" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    <span>Copy</span>
+                </button>
+                <button id="btn-sess-export-log" class="toolbar-btn flex items-center gap-1.5" title="Export logs to file" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                    </svg>
+                    <span>Export</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="px-6 py-3 border-b border-white/5 bg-white/[0.005] flex flex-col gap-3 flex-shrink-0">
+            <!-- Search & Filters Row -->
+            <div class="flex gap-2">
+                <div class="relative flex-1">
+                    <input type="text" id="log-search-input" placeholder="Search logs..." class="w-full pl-8 pr-4 py-1.5 bg-[#05070d]/60 border border-white/8 rounded-lg text-xs text-text-d placeholder-text-muted focus:outline-none focus:border-accent/40 transition-colors" />
+                    <span class="absolute left-2.5 top-2 text-text-dim">
+                        <svg viewBox="0 0 24 24" fill="none" width="11" height="11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </span>
+                </div>
+                <!-- Dropdown Select Category -->
+                <select id="log-filter-session" class="sess-select outline-none max-w-[130px]" style="padding: 4px 10px; font-size: 11px;">
+                    <option value="">All Categories</option>
+                </select>
+                <!-- Dropdown Select Account -->
+                <select id="log-filter-account" class="sess-select outline-none max-w-[130px]" style="padding: 4px 10px; font-size: 11px;">
+                    <option value="">All Users</option>
+                </select>
+            </div>
+
+            <!-- Log Filter Pills -->
+            <div id="sess-log-filter-pills" class="flex gap-1.5 overflow-x-auto pb-1">
+                <button class="filter-pill active" data-filter="all">All</button>
+                <button class="filter-pill" data-filter="INFO">Info</button>
+                <button class="filter-pill" data-filter="SUCCESS">Success</button>
+                <button class="filter-pill" data-filter="WARN">Warning</button>
+                <button class="filter-pill" data-filter="ERROR">Error</button>
+                <button class="filter-pill" data-filter="GUI">GUI</button>
+            </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div id="sess-log-stats-bar" class="px-6 py-1.5 border-b border-white/5 bg-white/[0.002] flex items-center justify-between flex-shrink-0 text-[10px]">
+            <div class="flex gap-3">
+                <div class="log-stat-item flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#3b82f6]"></span>
+                    <span class="text-[#8e8e93]">Info</span>
+                    <span id="sess-log-stat-info" class="font-bold text-[#3b82f6] font-mono">0</span>
+                </div>
+                <div class="log-stat-item flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+                    <span class="text-[#8e8e93]">Success</span>
+                    <span id="sess-log-stat-success" class="font-bold text-[#10b981] font-mono">0</span>
+                </div>
+                <div class="log-stat-item flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#fbbf24]"></span>
+                    <span class="text-[#8e8e93]">Warning</span>
+                    <span id="sess-log-stat-warn" class="font-bold text-[#fbbf24] font-mono">0</span>
+                </div>
+                <div class="log-stat-item flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#ef4444]"></span>
+                    <span class="text-[#8e8e93]">Error</span>
+                    <span id="sess-log-stat-error" class="font-bold text-[#ef4444] font-mono">0</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-1 text-[#10b981]">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+                <span class="font-mono" style="font-size: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Parallel Live</span>
+            </div>
+        </div>
+
+        <!-- Table Log Body -->
+        <div class="flex-1 overflow-y-auto p-4 bg-[#05070d]/50" id="sess-log-panel">
+            <div id="log-table-body" class="flex flex-col gap-1.5">
+                <!-- Log lines will be dynamically loaded here -->
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="js/app.js"></script>
 </body>
 
 </html>
+
+

@@ -8,12 +8,26 @@ if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
+// Helper untuk mendapatkan waktu Jakarta (GMT+7)
+function getJakartaDateTimeString(date = new Date()) {
+    return new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).format(date);
+}
+
 // File log harian: logs/bot-2026-06-13.log
-const today = new Date().toISOString().slice(0, 10);
+const today = getJakartaDateTimeString().slice(0, 10);
 const LOG_FILE = path.join(LOG_DIR, `bot-${today}.log`);
 
 const log = (message, type = 'INFO') => {
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const timestamp = getJakartaDateTimeString();
     const prefix = type === 'ERROR' ? '❌' : type === 'SUCCESS' ? '✅' : type === 'WARN' ? '⚠️' : 'ℹ️';
     const line = `[${timestamp}] ${prefix} ${message}`;
     console.log(line);

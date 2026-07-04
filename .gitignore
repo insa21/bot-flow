@@ -40,3 +40,25 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# Data akun & sesi runtime (sensitif — jangan di-commit)
+gui/accounts.json
+gui/multi_sessions.json
+multi_sessions.json
+gui/sessions/
+gui/tmp_sessions/
+tmp_sessions/
+sessions/
+
+# File progress bot (runtime state)
+.progress*.json
+
+# Folder prompt kerja (lokal)
+prompts/
+
+# Folder scratch / skrip pengembangan sementara
+scratch/
+
+# Skrip test & setup sementara
+test_*.js
+setup_*.js

@@ -59,7 +59,7 @@ function setupWindowHandlers(ipcMain, win) {
     ipcMain.handle('export-log', async (_, logText) => {
         const result = await dialog.showSaveDialog(win, {
             title: 'Export Log',
-            defaultPath: `bot-log-${new Date().toISOString().slice(0, 10)}.txt`,
+            defaultPath: `bot-log-${new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })}.txt`,
             filters: [{ name: 'Text Files', extensions: ['txt'] }],
         });
         if (result.canceled) return { ok: false };

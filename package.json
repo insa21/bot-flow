@@ -2,6 +2,7 @@
     "name": "google-flow-bot",
     "version": "1.0.0",
     "description": "Playwright automation for Google Flow",
+    "author": "insa21",
     "main": "gui/main.js",
     "scripts": {
         "start": "node index.js",

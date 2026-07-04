@@ -11,7 +11,7 @@ export function openLightbox(filePath, name) {
 
     const img  = document.getElementById('lightbox-img');
     const wrap = document.getElementById('lightbox-img-wrap');
-    img.src = `file://${filePath.replace(/\\/g, '/')}`;
+    img.src = `file:///${filePath.replace(/\\/g, '/')}`;
     img.classList.remove('zoomed');
     if (wrap) wrap.classList.remove('zoomed');
 

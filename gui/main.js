@@ -3,9 +3,11 @@
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { setupWindowHandlers } = require('./handlers/windowHandlers');
-const { setupBotHandlers }    = require('./handlers/botHandlers');
-const { setupFileHandlers }   = require('./handlers/fileHandlers');
+const { setupWindowHandlers }  = require('./handlers/windowHandlers');
+const { setupBotHandlers }     = require('./handlers/botHandlers');
+const { setupFileHandlers }    = require('./handlers/fileHandlers');
+const { setupAccountHandlers } = require('./handlers/accountHandlers');
+const { setupSessionHandlers } = require('./handlers/sessionHandlers');
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let mainWindow = null;
@@ -40,10 +42,20 @@ function createWindow() {
         }
     });
 
+    mainWindow.webContents.on('console-message', (event) => {
+        const { level, message, lineNumber, sourceId } = event;
+        const src = sourceId ? path.basename(sourceId) : 'unknown';
+        if (level >= 2) {
+            console.log(`[RENDERER] [LEVEL-${level}] ${message} (${src}:${lineNumber})`);
+        }
+    });
+
     // Daftarkan semua handler IPC
     setupWindowHandlers(ipcMain, mainWindow);
     setupBotHandlers(ipcMain, mainWindow);
     setupFileHandlers(ipcMain, mainWindow);
+    setupAccountHandlers(ipcMain, mainWindow);
+    setupSessionHandlers(ipcMain, mainWindow);
 }
 
 // ─── App lifecycle ───────────────────────────────────────────────────────────
