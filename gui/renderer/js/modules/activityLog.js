@@ -1,9 +1,12 @@
 // js/modules/activityLog.js — Manajemen log aktivitas multi-sesi (Apple-style UI)
 'use strict';
 
+import { EMOJI_MAP } from './constants.js';
+
 // Simpan semua log dalam array global di memori renderer
 let allLogs = [];
 let sessAutoScroll = true;
+let sessLogPaused = false;
 let currentSessFilter = 'all';
 
 /**
@@ -15,79 +18,136 @@ let currentSessFilter = 'all';
  */
 export function addLogEntry(sessionId, sessionName, accountName, line) {
     const time = new Date();
-    
+    const lineTrim = line.trim();
+
+    // 1. Parse timestamp dan emoji prefix dari bot logger
+    let parsedTime = time;
+    let prefix = '';
+    let cleanMessage = lineTrim;
+
+    const tsMatch = lineTrim.match(/^\[([\d-:\s]+)\]\s*(.*)$/);
+    if (tsMatch) {
+        const tsStr = tsMatch[1];
+        const parts = tsStr.split(' ');
+        if (parts.length === 2) {
+            const dtParts = parts[0].split('-');
+            const tmParts = parts[1].split(':');
+            if (dtParts.length === 3 && tmParts.length === 3) {
+                try {
+                    parsedTime = new Date(
+                        parseInt(dtParts[0]),
+                        parseInt(dtParts[1]) - 1,
+                        parseInt(dtParts[2]),
+                        parseInt(tmParts[0]),
+                        parseInt(tmParts[1]),
+                        parseInt(tmParts[2])
+                    );
+                } catch {
+                    parsedTime = time;
+                }
+            }
+        }
+        
+        const rest = tsMatch[2].trim();
+        // Deteksi dan bersihkan emoji di awal sisa pesan
+        const emojiMatch = rest.match(/^(❌|✅|⚠️|ℹ️|ℹ)\s*(.*)$/);
+        if (emojiMatch) {
+            prefix = emojiMatch[1];
+            cleanMessage = emojiMatch[2];
+        } else {
+            cleanMessage = rest;
+        }
+    }
+
     // Default values
     let status = 'Running';
     let action = 'Aktivitas';
-    let cleanMessage = line;
 
-    // ─── PARSER LOG UNTUK LINGKUNGAN MULTI-USER/MULTI-SESI ───
-    const lineTrim = line.trim();
-
-    // 1. Deteksi Error / Gagal
-    if (lineTrim.includes('[ERR]') || lineTrim.toLowerCase().includes('error') || lineTrim.toLowerCase().includes('fail')) {
+    // Klasifikasi status & action awal berdasarkan prefix emoji dari logger
+    if (prefix === '❌') {
         status = 'Error';
         action = 'System Error';
-        cleanMessage = lineTrim
+    } else if (prefix === '⚠️') {
+        status = 'Stopped';
+        action = 'Sesi Berhenti';
+    } else if (prefix === '✅') {
+        status = 'Completed';
+        action = 'Download Image';
+    } else {
+        status = 'Running';
+        action = 'Aktivitas';
+    }
+
+    // Klasifikasi / Penyesuaian khusus berdasarkan teks pesan
+    const msgLower = cleanMessage.toLowerCase();
+
+    // 1. Deteksi Error / Gagal
+    if (msgLower.includes('[err]') || msgLower.includes('error') || msgLower.includes('fail')) {
+        status = 'Error';
+        action = 'System Error';
+        cleanMessage = cleanMessage
             .replace(/^\[ERR\]\s*/i, '')
             .replace(/^Error:\s*/i, '')
             .replace(/Access is denied.*/i, 'Windows folder access blocked (Access Denied).');
     }
     // 2. Deteksi Blokir Kebijakan Konten Google (Penting untuk User)
-    else if (lineTrim.includes('Policy violation detected') || lineTrim.includes('Prompt blocked by Google policy')) {
+    else if (msgLower.includes('policy violation detected') || msgLower.includes('prompt blocked by google policy')) {
         status = 'Error';
         action = 'Content Blocked';
         cleanMessage = '⚠️ Google Policy: Prompt violated content policy and was skipped.';
     }
     // 3. Deteksi Prompt Tersimpan/Diproses
-    else if (lineTrim.match(/^\[(\d+)\/(\d+)\]\s*"(.*)"/)) {
-        const m = lineTrim.match(/^\[(\d+)\/(\d+)\]\s*"(.*)"/);
+    else if (cleanMessage.match(/^\[(\d+)\/(\d+)\]\s*"(.*)"/)) {
+        const m = cleanMessage.match(/^\[(\d+)\/(\d+)\]\s*"(.*)"/);
         status = 'Running';
         action = 'Process Prompt';
         cleanMessage = `Processing prompt [${m[1]}/${m[2]}]: "${m[3]}"`;
     }
     // 4. Deteksi Gambar Berhasil Disimpan
-    else if (lineTrim.includes('Saved image:') || lineTrim.includes('Saved scaled image:')) {
-        status = 'Running';
+    else if (msgLower.includes('saved') && (prefix === '✅' || msgLower.includes('image:') || msgLower.includes('scaled image:'))) {
+        status = 'Completed';
         action = 'Download Image';
-        const fileMatch = lineTrim.match(/(Saved image:|Saved scaled image:)\s*(.*)/i);
-        const fileName = fileMatch ? fileMatch[2].split(/[\\/]/).pop() : 'Gambar.png';
+        let fileName = 'Gambar.png';
+        const parts = cleanMessage.split(':');
+        if (parts.length > 1) {
+            fileName = parts[parts.length - 1].trim().split(/[\\/]/).pop();
+        }
         cleanMessage = `🎉 Image downloaded successfully: ${fileName}`;
     }
     // 5. Deteksi Mulai Pemrosesan Sesi
-    else if (lineTrim.includes('Ready! Starting prompt processing')) {
+    else if (msgLower.includes('ready! starting prompt processing')) {
         status = 'Running';
         action = 'Session Ready';
         cleanMessage = 'Browser opened successfully. Starting prompt processing...';
     }
     // 6. Deteksi Resume Session
-    else if (lineTrim.includes('Resuming:')) {
+    else if (msgLower.includes('resuming:')) {
         status = 'Running';
         action = 'Resume Sesi';
-        const m = lineTrim.match(/Resuming:\s*(.*)/i);
+        const m = cleanMessage.match(/Resuming:\s*(.*)/i);
         cleanMessage = `Resuming previous session: ${m ? m[1] : 'Reading progress file...'}`;
     }
     // 7. Deteksi Penyimpanan Gagal ke log/file
-    else if (lineTrim.includes('Prompt recorded in failed/failed.txt') || lineTrim.includes('Blocked prompt saved')) {
+    else if (msgLower.includes('prompt recorded in failed/failed.txt') || msgLower.includes('blocked prompt saved')) {
         status = 'Error';
         action = 'Log Failed';
         cleanMessage = 'Failed prompt recorded to failed history file.';
     }
     // 8. Deteksi Semua Selesai
-    else if (lineTrim.includes('All prompts completed') || lineTrim.includes('selesai')) {
+    else if (msgLower.includes('all prompts completed') || msgLower.includes('selesai')) {
         status = 'Completed';
         action = 'Selesai';
         cleanMessage = '✓ All prompts in this category have been completed.';
     }
     // 9. Deteksi Inisialisasi Akun Google oleh Bot
-    else if (lineTrim.includes('[GUI] 👤 Akun aktif:')) {
+    else if (msgLower.includes('[gui]') && msgLower.includes('akun aktif:')) {
         status = 'Running';
         action = 'Auth';
-        const m = lineTrim.match(/Akun aktif:\s*(.*)/i);
+        const m = cleanMessage.match(/Akun aktif:\s*(.*)/i);
         cleanMessage = `Activating Google Account session: ${m ? m[1] : 'Default'}`;
     }
     // 10. Session Stopped / Tutup
-    else if (lineTrim.includes('exit') || lineTrim.includes('stopped') || lineTrim.includes('selesai (exit')) {
+    else if (msgLower.includes('exit') || msgLower.includes('stopped') || msgLower.includes('selesai (exit')) {
         status = 'Stopped';
         action = 'Sesi Berhenti';
         cleanMessage = 'Category process stopped.';
@@ -95,7 +155,7 @@ export function addLogEntry(sessionId, sessionName, accountName, line) {
 
     const entry = {
         id: 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
-        time,
+        time: parsedTime,
         sessionId,
         sessionName: sessionName || 'Category',
         accountName: accountName || 'Default Account',
@@ -111,8 +171,8 @@ export function addLogEntry(sessionId, sessionName, accountName, line) {
         allLogs.pop();
     }
 
-    // Jika drawer sedang terbuka, render ulang tabel log
-    if (isDrawerOpen()) {
+    // Jika drawer sedang terbuka, render ulang tabel log (HANYA jika tidak di-pause!)
+    if (isDrawerOpen() && !sessLogPaused) {
         renderLogTable();
     }
 }
@@ -128,6 +188,29 @@ export function openLogDrawer(filterSessionId = null, filterAccountName = null) 
     const drawer = document.getElementById('sess-log-drawer');
     const backdrop = document.getElementById('sess-log-backdrop');
     if (!drawer || !backdrop) return;
+
+    // Reset status pause ke false (Live stream aktif kembali)
+    sessLogPaused = false;
+    const pauseBtn = document.getElementById('btn-sess-pause');
+    if (pauseBtn) {
+        pauseBtn.classList.remove('toolbar-btn-active', 'bg-red-500/20', 'text-red-400', 'border-red-500/30');
+        pauseBtn.title = "Pause log stream (freeze UI)";
+        pauseBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <span>Pause</span>
+        `;
+    }
+    const statusDiv = document.getElementById('sess-log-live-status');
+    if (statusDiv) {
+        statusDiv.className = "flex items-center gap-1 text-[#10b981]";
+        statusDiv.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+            <span class="font-mono" style="font-size: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Parallel Live</span>
+        `;
+    }
 
     // Reset filter input
     const searchInp = document.getElementById('log-search-input');
@@ -277,13 +360,19 @@ export function renderLogTable() {
         else if (log.status === 'Stopped') typeClass = 'WARN';
         else if (log.action === 'GUI') typeClass = 'GUI';
 
+        const iconHtml = getActivityIcon(log.action, log.status);
+        const shortUser = log.accountName ? log.accountName.split('@')[0] : 'Default';
+
         return `
-            <div class="log-line ${esc(typeClass)}" style="font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; border-radius: 6px; display: flex; gap: 10px; align-items: center;">
-                <span class="log-time text-[10px] text-[#6e7a90] whitespace-nowrap" style="min-width: 50px;">${timeStr}</span>
-                <span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-[#8896aa] border border-white/5 mr-1 font-bold uppercase whitespace-nowrap" style="min-width: 65px; justify-content: center; opacity: 0.85;">${esc(log.action)}</span>
-                <span class="text-text-d font-semibold text-[10px] truncate" style="max-width: 80px; min-width: 50px;" title="${esc(log.sessionName)}">${esc(log.sessionName)}</span>
-                <span class="text-[#8896aa] text-[10px] truncate" style="max-width: 100px; min-width: 60px;" title="${esc(log.accountName)}">${esc(log.accountName)}</span>
-                <span class="log-msg text-text-d font-mono flex-1 break-all md:break-normal text-left">${esc(log.message)}</span>
+            <div class="log-line ${esc(typeClass)}" style="font-size: 11px;">
+                <span class="log-time">${timeStr}</span>
+                <span class="log-icon-wrap" style="width: 32px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    ${iconHtml}
+                </span>
+                <span class="log-metadata" style="font-size: 10px; font-weight: 600; color: #8896aa; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 1.5px 6px; border-radius: 4px; opacity: 0.85; flex-shrink: 0; font-family: var(--font-mono); margin-right: 4px;" title="${esc(log.sessionName)} (${esc(log.accountName)})">
+                    ${esc(log.sessionName)} (${esc(shortUser)})
+                </span>
+                <span class="log-msg">${enrichLogMessage(log.message)}</span>
             </div>
         `;
     }).join('');
@@ -304,6 +393,97 @@ function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c =>
         ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
     );
+}
+
+export function enrichLogMessage(message) {
+    let escaped = esc(message);
+    const keys  = Object.keys(EMOJI_MAP).sort((a, b) => b.length - a.length);
+    const regex = new RegExp(keys.join('|'), 'g');
+    return escaped.replace(regex, match => EMOJI_MAP[match] || match);
+}
+
+function getActivityIcon(action, status) {
+    const isRunning = status === 'Running';
+    
+    // Choose SVG based on action
+    let svg = '';
+    let colorClass = 'blue-icon';
+    let animClass = '';
+
+    switch (action) {
+        case 'System Error':
+        case 'Log Failed':
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+            colorClass = 'red-icon';
+            break;
+        case 'Content Blocked':
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>`;
+            colorClass = 'red-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+        case 'Process Prompt':
+            // Icon: pencil/edit
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+            colorClass = 'blue-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+        case 'Download Image':
+            // Icon: Image
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+            colorClass = 'pink-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+        case 'Session Ready':
+            // Icon: Rocket
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2l-7 20-4-9-9-4Z"/><path d="M22 2L11 13"/></svg>`;
+            colorClass = 'green-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+        case 'Resume Sesi':
+            // Icon: reload
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
+            colorClass = 'cyan-icon';
+            if (isRunning) animClass = 'spin-slow';
+            break;
+        case 'Auth':
+            // Icon: user
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+            colorClass = 'indigo-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+        case 'Selesai':
+            // Icon: check-circle
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+            colorClass = 'green-icon';
+            break;
+        case 'Sesi Berhenti':
+            // Icon: stop-circle
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>`;
+            colorClass = 'amber-icon';
+            break;
+        default:
+            // Icon: info
+            svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+            colorClass = 'blue-icon';
+            if (isRunning) animClass = 'pulse-active';
+            break;
+    }
+
+    let iconHtml = svg.replace('<svg', `<svg class="inline-icon ${colorClass} ${animClass}"`);
+
+    if (isRunning) {
+        const spinner = `<svg class="inline-icon accent-icon spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width: 10px; height: 10px; margin-right: 2px;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2"></circle><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path></svg>`;
+        return `<div class="flex items-center gap-1">${spinner}${iconHtml}</div>`;
+    }
+
+    return iconHtml;
+}
+
+export function clearSessionLogs(sessionId) {
+    allLogs = allLogs.filter(log => log.sessionId !== sessionId);
+    if (isDrawerOpen()) {
+        renderLogTable();
+    }
 }
 
 // ── Bind event listeners untuk panel log laci paralel ──
@@ -381,6 +561,55 @@ document.addEventListener('DOMContentLoaded', () => {
             pill.classList.add('active');
             currentSessFilter = pill.dataset.filter;
             renderLogTable();
+        });
+    }
+
+    // Pause stream toggle
+    const pauseBtn = document.getElementById('btn-sess-pause');
+    if (pauseBtn) {
+        pauseBtn.addEventListener('click', () => {
+            sessLogPaused = !sessLogPaused;
+            const statusDiv = document.getElementById('sess-log-live-status');
+            if (sessLogPaused) {
+                // Set button to Active/Resume state (warning/danger red theme)
+                pauseBtn.classList.add('toolbar-btn-active', 'bg-red-500/20', 'text-red-400', 'border-red-500/30');
+                pauseBtn.title = "Resume log stream (live updates)";
+                pauseBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21"></polygon>
+                    </svg>
+                    <span>Resume</span>
+                `;
+                // Ubah penanda status menjadi merah
+                if (statusDiv) {
+                    statusDiv.className = "flex items-center gap-1 text-[#ef4444]";
+                    statusDiv.innerHTML = `
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#ef4444]"></span>
+                        <span class="font-mono" style="font-size: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Stream Paused</span>
+                    `;
+                }
+            } else {
+                // Set button back to standard Pause state
+                pauseBtn.classList.remove('toolbar-btn-active', 'bg-red-500/20', 'text-red-400', 'border-red-500/30');
+                pauseBtn.title = "Pause log stream (freeze UI)";
+                pauseBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                    <span>Pause</span>
+                `;
+                // Kembalikan penanda status menjadi hijau berkedip
+                if (statusDiv) {
+                    statusDiv.className = "flex items-center gap-1 text-[#10b981]";
+                    statusDiv.innerHTML = `
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+                        <span class="font-mono" style="font-size: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Parallel Live</span>
+                    `;
+                }
+                // Render accumulated logs immediately
+                renderLogTable();
+            }
         });
     }
 

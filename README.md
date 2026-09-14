@@ -2,7 +2,7 @@
 
 ![Flow Bot Banner](gui/renderer/flow_bot_banner.png)
 
-> **Flow Bot** adalah aplikasi otomasi cerdas untuk men-download dan mengelola hasil generate gambar dari **Google Flow (labs.google/fx/tools/flow)**. Proyek ini hadir dalam dua versi: **CLI (Command Line Interface)** yang cepat dan minimalis, serta **GUI (Graphical User Interface)** modern berbasis **Electron** dengan desain premium (glassmorphic dark-theme) yang dilengkapi dengan dasbor pemantauan, editor prompt interaktif, konsol aktivitas, dan galeri manajemen gambar yang canggih.
+> **Flow Bot** adalah aplikasi otomasi cerdas untuk men-download dan mengelola hasil generate gambar dari **Google Flow (https://flow.google.com/)**. Proyek ini hadir dalam dua versi: **CLI (Command Line Interface)** yang cepat dan minimalis, serta **GUI (Graphical User Interface)** modern berbasis **Electron** dengan desain premium (glassmorphic dark-theme) yang dilengkapi dengan dasbor pemantauan, editor prompt interaktif, konsol aktivitas, dan galeri manajemen gambar yang canggih.
 
 ---
 

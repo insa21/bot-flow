@@ -1,7 +1,7 @@
 // js/modules/sessionManager.js — UI untuk multi-sesi paralel berbasis kategori (Apple Design)
 'use strict';
 
-import { addLogEntry, openLogDrawer, closeLogDrawer, renderLogTable } from './activityLog.js';
+import { addLogEntry, openLogDrawer, closeLogDrawer, renderLogTable, clearSessionLogs, enrichLogMessage } from './activityLog.js';
 
 const STATUS_LABEL = {
     idle:      { text: 'Idle',      color: '#8896aa', bg: 'rgba(136, 150, 170, 0.08)', border: 'rgba(136, 150, 170, 0.2)' },
@@ -165,8 +165,8 @@ function buildCard(sess, idx, accounts) {
                         </div>
                     </div>
 
-                    <!-- Browser, Resume & Resolution Mode in Grid -->
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                    <!-- Browser, Resume, Resolution & Typing Speed in Grid -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
                         <!-- Browser Mode -->
                         <div class="sess-field-body">
                             <div class="sess-field-label">Browser Mode</div>
@@ -192,6 +192,17 @@ function buildCard(sess, idx, accounts) {
                                 <option value="1k" ${sess.config?.imageSize === '1k' ? 'selected' : ''}>1K (Original)</option>
                                 <option value="2k" ${sess.config?.imageSize === '2k' || !sess.config?.imageSize ? 'selected' : ''}>2K (Enhanced)</option>
                                 <option value="4k" ${sess.config?.imageSize === '4k' ? 'selected' : ''}>4K (Ultra HD)</option>
+                            </select>
+                        </div>
+
+                        <!-- Typing Speed -->
+                        <div class="sess-field-body">
+                            <div class="sess-field-label">Typing Speed</div>
+                            <select class="sess-select" style="width:100%;" data-field="typingSpeed" data-id="${esc(sess.id)}" ${disAttr}>
+                                <option value="slow"   ${sess.config?.typingSpeed === 'slow'   ? 'selected' : ''}>🐢 Slow</option>
+                                <option value="normal" ${sess.config?.typingSpeed === 'normal' || !sess.config?.typingSpeed ? 'selected' : ''}>⚡ Normal</option>
+                                <option value="fast"   ${sess.config?.typingSpeed === 'fast'   ? 'selected' : ''}>🚀 Fast</option>
+                                <option value="turbo"  ${sess.config?.typingSpeed === 'turbo'  ? 'selected' : ''}>💨 Turbo</option>
                             </select>
                         </div>
                     </div>
@@ -391,6 +402,19 @@ export async function setupSessionManager() {
             });
         });
 
+        // Dropdown Typing Speed Change
+        container.querySelectorAll('.sess-select[data-field="typingSpeed"]').forEach(sel => {
+            sel.addEventListener('change', async () => {
+                const id = sel.dataset.id;
+                const sess = sessions.find(s => s.id === id);
+                if (sess) {
+                    const config = sess.config || {};
+                    config.typingSpeed = sel.value;
+                    await api.sessionUpdate(id, { config });
+                }
+            });
+        });
+
         // Buka Activity Log Kategori (per user/session)
         container.querySelectorAll('.sess-btn-log').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -456,6 +480,8 @@ export async function setupSessionManager() {
                 sessionStartTimes.set(btn.dataset.id, Date.now());
                 // Reset log history lokal
                 sessionLogsHistory.set(btn.dataset.id, []);
+                // Hapus log lama sesi ini dari central activity log
+                clearSessionLogs(btn.dataset.id);
 
                 const r = await api.sessionStart(btn.dataset.id);
                 if (!r.ok) {
@@ -563,6 +589,8 @@ export async function setupSessionManager() {
             if (s.status !== 'running') {
                 sessionStartTimes.set(s.id, Date.now());
                 sessionLogsHistory.set(s.id, []);
+                // Hapus log lama sesi ini dari central activity log
+                clearSessionLogs(s.id);
             }
         });
         const r = await api.sessionStartAll();
@@ -594,11 +622,61 @@ export async function setupSessionManager() {
         // 2. Tulis ke log mini card
         const inner = document.getElementById(`sess-log-inner-${sessionId}`);
         if (inner) {
+            // Parse line
+            const lineTrim = line.trim();
+            
+            let timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            let prefix = '';
+            let cleanMessage = lineTrim;
+            
+            const tsMatch = lineTrim.match(/^\[([\d-:\s]+)\]\s*(.*)$/);
+            if (tsMatch) {
+                const tsStr = tsMatch[1];
+                const parts = tsStr.split(' ');
+                if (parts.length === 2) {
+                    timeStr = parts[1]; // ambil HH:MM:SS saja
+                }
+                const rest = tsMatch[2].trim();
+                const emojiMatch = rest.match(/^(❌|✅|⚠️|ℹ️|ℹ)\s*(.*)$/);
+                if (emojiMatch) {
+                    prefix = emojiMatch[1];
+                    cleanMessage = emojiMatch[2];
+                } else {
+                    cleanMessage = rest;
+                }
+            }
+
+            let typeClass = 'INFO';
+            let iconHtml = '';
+            
+            if (prefix === '❌') {
+                typeClass = 'ERROR';
+                iconHtml = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" class="inline-block text-red-400" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15" stroke-width="2.5"></line><line x1="9" y1="9" x2="15" y2="15" stroke-width="2.5"></line></svg>`;
+            } else if (prefix === '⚠️') {
+                typeClass = 'WARN';
+                iconHtml = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" class="inline-block text-amber-400" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13" stroke-width="2.5"></line><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"></line></svg>`;
+            } else if (prefix === '✅') {
+                typeClass = 'SUCCESS';
+                iconHtml = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" class="inline-block text-green-400 animate-bounce" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" stroke-width="2.2"></circle><polyline points="16 9 11 14 8 11" stroke-width="2.5"></polyline></svg>`;
+            } else {
+                typeClass = 'INFO';
+                const msgLower = cleanMessage.toLowerCase();
+                if (msgLower.includes('clicking') || msgLower.includes('hovering') || msgLower.includes('waiting') || msgLower.includes('searching') || msgLower.includes('activating')) {
+                    iconHtml = `<svg class="inline-block text-blue-400 animate-spin" viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="3" style="animation-duration: 1s;"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2"></circle><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path></svg>`;
+                } else {
+                    iconHtml = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" class="inline-block text-blue-400" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12" stroke-width="2.5"></line><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="3"></line></svg>`;
+                }
+            }
+
             const el = document.createElement('div');
-            el.textContent = line;
-            el.style.cssText = 'font-size:10px;color:#8896aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5;';
+            el.className = `sess-mini-log-line ${typeClass}`;
+            el.innerHTML = `
+                <span class="text-[#8e8e93] font-mono whitespace-nowrap" style="font-size: 9px; opacity: 0.7;">${timeStr}</span>
+                <span style="display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 12px; height: 12px;">${iconHtml}</span>
+                <span class="font-mono truncate" style="flex: 1; text-align: left;" title="${esc(cleanMessage)}">${enrichLogMessage(cleanMessage)}</span>
+            `;
             inner.appendChild(el);
-            while (inner.children.length > 6) inner.removeChild(inner.firstChild);
+            while (inner.children.length > 5) inner.removeChild(inner.firstChild);
             document.getElementById(`sess-log-${sessionId}`)?.classList.remove('hidden');
         }
 

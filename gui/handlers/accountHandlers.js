@@ -1,4 +1,4 @@
-﻿// handlers/accountHandlers.js â€” Manajemen multi-akun Google Flow Bot
+// handlers/accountHandlers.js â€” Manajemen multi-akun Google Flow Bot
 'use strict';
 
 const path          = require('path');
@@ -162,7 +162,7 @@ function setupAccountHandlers(ipcMain, mainWin) {
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--disable-default-apps',
-                'https://labs.google/fx/tools/flow',
+                'https://flow.google.com/',
             ], {
                 detached: false,
                 windowsHide: false,

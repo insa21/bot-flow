@@ -1,13 +1,4 @@
-# Kategori: Ilustrasi
-# File ini berisi 10 prompt bertema ilustrasi dan seni digital
-
-A magical floating island with waterfalls cascading into the clouds, lush green trees, fantasy art style, vibrant colors, Ghibli-inspired
-A cozy bookshop on a rainy evening, warm lantern light spilling through window, cobblestone street, illustrated storybook style
-A dragon sleeping on a mountain of gold coins in a cave, epic fantasy illustration, detailed scales, dramatic lighting
-A mermaid kingdom deep under the ocean, bioluminescent coral, glowing fish, colorful palace, Disney animation style
-A tiny wizard village inside a giant mushroom forest, magical fireflies, cute cottages with glowing windows, whimsical art
-An adventurer's map of a fictional world, illustrated parchment style, compass rose, mountains, sea monsters, hand-drawn look
-A portal to another dimension opening in a forest, swirling purple and gold energy, magical particles, concept art style
-Cute kawaii versions of planets in our solar system, pastel colors, big eyes, holding hands, flat illustration style
-A steampunk airship floating above Victorian London, gears and brass, smoke stacks, sunset sky, detailed illustration
-A phoenix rising from flames, majestic wings spread wide, golden fire, dark dramatic background, epic fantasy art
+a
+b
+c
+d

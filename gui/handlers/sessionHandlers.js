@@ -132,7 +132,8 @@ function startSession(win, session, globalConfig) {
     const maxRetries = config.maxRetries !== undefined ? config.maxRetries : (globalConfig?.maxRetries || 3);
     const ctxTimeout = config.ctxTimeout !== undefined ? config.ctxTimeout : (globalConfig?.ctxTimeout || 15000);
     const dlTimeout  = config.dlTimeout !== undefined ? config.dlTimeout : (globalConfig?.dlTimeout || 300000);
-    const resume     = config.resume !== undefined ? config.resume : false;
+    const resume      = config.resume !== undefined ? config.resume : false;
+    const typingSpeed = config.typingSpeed || 'normal';
 
     // Hapus file progress jika resume dinonaktifkan
     if (!resume) {
@@ -151,6 +152,7 @@ function startSession(win, session, globalConfig) {
         MAX_RETRIES:             String(maxRetries),
         CONTEXT_MENU_TIMEOUT_MS: String(ctxTimeout),
         DOWNLOAD_TIMEOUT_MS:     String(dlTimeout),
+        TYPING_SPEED:            typingSpeed,
         // Per-session
         USER_DATA_DIR:      userDataDir,
         OUTPUT_DIR:        outputDir,

@@ -10,9 +10,11 @@ const { log, LOG_FILE } = require('./utils/logger');
 // ============================================================
 //  KONFIGURASI
 // ============================================================
-const FLOW_URL = 'https://labs.google/fx/tools/flow';
+// ─── URL diupdate ke domain baru (labs.google → flow.google.com) ───────────
+const FLOW_URL = 'https://flow.google.com/';
 const PROMPT_INPUT_SELECTOR = '[contenteditable="true"]';
 
+// Kandidat selector untuk navigasi ulang sesi (legacy, belum tentu dipakai di UI baru)
 const NEW_CONVERSATION_CANDIDATES = [
     'button[aria-label*="New"]',
     'button[aria-label*="new"]',
@@ -20,7 +22,6 @@ const NEW_CONVERSATION_CANDIDATES = [
     'button[aria-label*="Clear"]',
     '[data-testid*="new"]',
     '[title*="New"]',
-    'a[href*="flow"]:not([href*="?"])',
 ];
 
 // Output directory: GUI sets process.env.OUTPUT_DIR; CLI falls back to ./output
@@ -215,9 +216,9 @@ async function launchBrowser() {
         || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
     // ── Versi HARUS cocok dengan binary Chrome yang dijalankan ─────────────────
-    // Cek versi Chrome yang terinstall: 149.0.7827.156
-    const CHROME_VERSION  = '149.0.7827.156';
-    const CHROME_MAJOR    = '149';
+    // Cek versi Chrome yang terinstall: 150.0.7871.46
+    const CHROME_VERSION  = '150.0.7871.46';
+    const CHROME_MAJOR    = '150';
     const UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VERSION} Safari/537.36`;
 
     log(`Launching Chrome ${CHROME_MAJOR} (real binary)...`);
@@ -393,117 +394,155 @@ async function ensureAgentOff(page, timeoutMs = 1500) {
     }
 }
 
-// ── Buat proyek baru, tutup panel "Sesi tanpa judul", matikan Agen ──────────
-async function setupNewProject(page) {
-
-    // ── Langkah 1: Klik tombol "Project baru" ──────────────────────────────────
-    log('Creating a new project in Flow...');
-    const newProjectCandidates = [
-        'button:has-text("Project baru")',
-        'button:has-text("Proyek baru")',
-        'button:has-text("New project")',
-        'button:has-text("New Project")',
-        '[data-testid*="new-project"]',
-        'button[aria-label*="Project baru"]',
-    ];
-    const newProjectBtn = await findFirstVisible(page, newProjectCandidates, 6000);
-    if (newProjectBtn) {
-        await newProjectBtn.click();
-        log('✅ "New project" button clicked.');
-        try {
-            await page.waitForLoadState('networkidle', { timeout: 10000 });
-        } catch { /* lanjut */ }
-        await page.waitForTimeout(2500);
-    } else {
-        log('ℹ️  "New project" button not found, proceeding...', 'WARN');
-    }
-
-    // ── Langkah 2: Tunggu panel muncul, lalu tutup dengan scoped selector ──────
-    // Panel "Sesi tanpa judul" adalah sidebar bukan dialog.
-    // Tombol ✕ adalah SATU-SATUNYA button dengan teks "close" + "Tutup" di header panel.
-    log('Waiting for "Untitled session" panel to appear...');
-
-    let panelLocator = null;
+/**
+ * Memastikan mode generate adalah GAMBAR (bukan Video).
+ * UI flow.google.com memiliki toggle Gambar/Video di toolbar bawah.
+ * Default bisa Video — bot selalu harus memastikan mode Gambar aktif.
+ */
+async function ensureImageMode(page) {
+    log('Ensuring Image generation mode is active...');
     try {
-        // Tunggu teks "Sesi tanpa judul" muncul di DOM (max 8 detik)
-        await page.waitForSelector('text="Sesi tanpa judul"', { timeout: 8000, state: 'visible' });
-        // Ambil elemen kontainer terdekat yang mengandung teks tersebut
-        panelLocator = page.locator('div').filter({ hasText: /^Sesi tanpa judul$/ }).last();
-        log('"Untitled session" panel detected.');
-    } catch {
-        // Coba versi Inggris
-        try {
-            await page.waitForSelector('text="Untitled session"', { timeout: 3000, state: 'visible' });
-            panelLocator = page.locator('div').filter({ hasText: /^Untitled session$/ }).last();
-            log('"Untitled session" panel detected.');
-        } catch {
-            log('ℹ️  Session panel not detected, proceeding...', 'WARN');
-        }
-    }
+        // Cek apakah tab Gambar/Image sudah terlihat (popup settings mungkin terbuka)
+        let gambarTab = page.locator(
+            'button:has-text("Gambar"):not(:has-text("Agen")):not(:has-text("Agent")), ' +
+            'button:has-text("Image"):not(:has-text("Agent")):not(:has-text("Agen"))'
+        ).first();
 
-    if (panelLocator) {
-        // Cari tombol close yang paling dekat: naik ke ancestor yang berisi tombol
-        // Struktur: header row → ☰ "Sesi tanpa judul" ↗ ✕
-        // Tombol ✕ memiliki teks gabungan "close" (icon) + "Tutup"
-        let panelClosed = false;
-
-        // Metode 1: getByRole scoped — cari button bernama "Tutup" atau "Close"
-        try {
-            const closeBtn = page.getByRole('button', { name: /^(Tutup|Close)$/i });
-            const count = await closeBtn.count();
-            for (let i = 0; i < count; i++) {
-                const btn = closeBtn.nth(i);
-                if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+        if (!await gambarTab.isVisible({ timeout: 1500 }).catch(() => false)) {
+            // Coba buka popup settings via tombol pengaturan di toolbar bawah
+            // Urutan selector dari spesifik ke fallback
+            const settingsTriggers = [
+                'button[aria-label*="Pengaturan"]',
+                'button[aria-label*="Settings"]',
+                'button[aria-label*="mode"]',
+                'button[aria-label*="Mode"]',
+                'button[aria-label*="aspect"]',
+                'button[aria-label*="ratio"]',
+                '[data-testid*="settings"]',
+                '[data-testid*="mode"]',
+                // Angular/Material component selectors
+                'flow-generation-settings button',
+                'flow-prompt-bar button.mode-button',
+            ];
+            for (const sel of settingsTriggers) {
+                const btn = page.locator(sel).first();
+                if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
                     await btn.click();
-                    await page.waitForTimeout(800);
-                    panelClosed = true;
-                    log('✅ Panel closed via getByRole("button", {name: Tutup/Close}).');
+                    await page.waitForTimeout(600);
                     break;
                 }
             }
-        } catch { /* lanjut ke metode berikutnya */ }
-
-        // Metode 2: Cari tombol yang berisi KEDUANYA "close" DAN "Tutup"
-        if (!panelClosed) {
-            try {
-                const closeBtns = page.locator('button').filter({ hasText: 'Tutup' });
-                const count = await closeBtns.count();
-                for (let i = 0; i < count; i++) {
-                    const btn = closeBtns.nth(i);
-                    if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
-                        await btn.click();
-                        await page.waitForTimeout(800);
-                        panelClosed = true;
-                        log('✅ Panel closed via button.filter(hasText: Tutup/Close).');
-                        break;
-                    }
-                }
-            } catch { /* lanjut */ }
         }
 
-        // Verifikasi apakah panel benar-benar sudah tertutup
-        await page.waitForTimeout(500);
-        const panelStillVisible = await page.locator('text="Sesi tanpa judul"').isVisible({ timeout: 1500 }).catch(() => false);
+        // Sekarang cari tab Gambar
+        gambarTab = page.locator(
+            'button:has-text("Gambar"):not(:has-text("Agen")):not(:has-text("Agent")), ' +
+            'button:has-text("Image"):not(:has-text("Agent")):not(:has-text("Agen"))'
+        ).first();
 
-        if (panelStillVisible) {
-            log('⚠️  Panel is still open! Trying Escape...', 'WARN');
-            await page.keyboard.press('Escape');
-            await page.waitForTimeout(800);
+        if (await gambarTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+            // Cek apakah sudah aktif lewat class/aria
+            const isActive = await gambarTab.evaluate(el => {
+                const cls = Array.from(el.classList).join(' ').toLowerCase();
+                const ariaSelected = el.getAttribute('aria-selected');
+                const ariaPressed  = el.getAttribute('aria-pressed');
+                const ariaChecked  = el.getAttribute('aria-checked');
+                return cls.includes('active') || cls.includes('selected') ||
+                       cls.includes('mdc-tab--active') ||
+                       ariaSelected === 'true' || ariaPressed === 'true' || ariaChecked === 'true';
+            }).catch(() => false);
 
-            // Cek sekali lagi setelah Escape
-            const stillOpen = await page.locator('text="Sesi tanpa judul"').isVisible({ timeout: 1500 }).catch(() => false);
-            if (!stillOpen) {
-                log('✅ Panel closed via Escape.');
+            if (!isActive) {
+                await gambarTab.click();
+                await page.waitForTimeout(600);
+                log('✅ Image mode selected.');
             } else {
-                log('⚠️  Panel could not be closed.', 'WARN');
+                log('ℹ️  Image mode is already active.');
             }
+            // Tutup popup dengan Escape
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(300);
         } else {
-            log('✅ "Untitled session" panel is no longer in DOM.');
+            log('ℹ️  Image mode tab not found — assuming already in correct mode.', 'WARN');
+        }
+    } catch (e) {
+        log(`⚠️  ensureImageMode error: ${e.message}`, 'WARN');
+    }
+}
+
+// ── Buat proyek baru di flow.google.com, dismiss dialog, set mode Gambar ─────
+// Catatan (Sep 2026): URL Flow berubah dari labs.google/fx/tools/flow
+//   ke flow.google.com. Panel "Sesi tanpa judul" sudah tidak ada di UI baru.
+//   Setelah klik "Project baru", halaman langsung navigasi ke /project/<id>.
+//   Ada onboarding dialog yang perlu di-dismiss, dan mode default bisa Video.
+async function setupNewProject(page) {
+
+    // ── Langkah 1: Klik "Project baru" jika masih di dashboard ────────────────
+    const currentUrl = page.url();
+    if (!currentUrl.includes('/project/')) {
+        log('On dashboard — creating a new project...');
+        const newProjectCandidates = [
+            'button:has-text("Project baru")',
+            'button:has-text("Proyek baru")',
+            'button:has-text("New project")',
+            'button:has-text("New Project")',
+            'button.new-project-button',
+            '[data-testid*="new-project"]',
+            'button[aria-label*="Project baru"]',
+            'button[aria-label*="New project"]',
+        ];
+        const newProjectBtn = await findFirstVisible(page, newProjectCandidates, 6000);
+        if (newProjectBtn) {
+            await newProjectBtn.click();
+            log('✅ "New project" button clicked.');
+            // Tunggu navigasi ke halaman project (URL berubah ke /project/<id>)
+            try {
+                await page.waitForURL('**/project/**', { timeout: 15000 });
+                log('✅ Navigated to new project page.');
+            } catch {
+                // Fallback: tunggu networkidle
+                try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch { /* lanjut */ }
+            }
+            await page.waitForTimeout(2500);
+        } else {
+            log('ℹ️  "New project" button not found, proceeding...', 'WARN');
+        }
+    } else {
+        log('ℹ️  Already on a project page, skipping new project creation.');
+    }
+
+    // ── Langkah 2: Dismiss onboarding/tutorial dialog jika muncul ────────────
+    // Dialog ini muncul saat pertama kali buka project baru di flow.google.com
+    // Contoh teks: "Anda membuat video dengan Gemini Omni Flash..."
+    log('Checking for onboarding dialogs...');
+    const onboardingDismissCandidates = [
+        'button:has-text("Oke")',
+        'button:has-text("OK")',
+        'button:has-text("Got it")',
+        'button:has-text("Mengerti")',
+        'button:has-text("Selesai")',
+        'button:has-text("Done")',
+        'button:has-text("Dismiss")',
+        'button:has-text("Tutup")',
+        'button:has-text("Close")',
+    ];
+    for (const sel of onboardingDismissCandidates) {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+            log(`ℹ️  Onboarding dialog detected → dismissing via: ${sel}`);
+            await btn.click();
+            await page.waitForTimeout(1000);
+            log('✅ Onboarding dialog dismissed.');
+            break;
         }
     }
 
-    // ── Langkah 3: Matikan tombol "Agen" di area input utama ───────────────────
-    // Hanya lakukan SETELAH panel tertutup supaya tidak match tombol di dalam panel
+    // ── Langkah 3: Pastikan mode Gambar aktif (bukan Video) ───────────────────
+    // flow.google.com mendukung Gambar DAN Video — bot hanya untuk gambar
+    await ensureImageMode(page);
+    await page.waitForTimeout(500);
+
+    // ── Langkah 4: Matikan tombol "Agen" di area input utama ──────────────────
     await ensureAgentOff(page, 3000);
     await page.waitForTimeout(500);
 }
@@ -520,29 +559,63 @@ async function waitForFlowReady(page, maxWaitMs = 60000) {
 }
 
 /**
- * Mengetik teks dengan pola yang lebih menyerupai manusia:
- * - Delay per karakter 80–200ms (rata-rata manusia ~120ms)
- * - Sesekali ada burst cepat (saat mengetik kata umum)
- * - Sesekali ada micro-pause antar kata (50–300ms ekstra)
- * - Tidak ada interval yang terlalu seragam
+ * Mengetik teks dengan pola yang menyerupai manusia.
+ * Kecepatan dikontrol oleh env TYPING_SPEED:
+ *   slow   → ~80–220ms/karakter (seperti manusia lambat)
+ *   normal → ~20–60ms/karakter  (default, cepat namun natural)
+ *   fast   → ~8–25ms/karakter   (cepat)
+ *   turbo  → ~2–8ms/karakter    (secepat mungkin)
  */
-async function humanType(page, text) {
+async function humanType(page, text, inputLocator = null) {
+    // Multiplier delay berdasarkan TYPING_SPEED env
+    const speedMode = (process.env.TYPING_SPEED || 'normal').toLowerCase();
+    const mult = speedMode === 'slow'   ? 3.5
+               : speedMode === 'fast'  ? 0.35
+               : speedMode === 'turbo' ? 0.12
+               : 1.0; // normal
+
     for (let i = 0; i < text.length; i++) {
         const ch = text[i];
-        // Karakter spasi/tanda baca → pause lebih lama (jeda berpikir antar kata)
         let charDelay;
         if (ch === ' ') {
-            charDelay = randomDelay(80, 220);
-            // 20% chance: micro-pause ekstra setelah spasi (seperti berpikir)
-            if (Math.random() < 0.20) charDelay += randomDelay(100, 400);
+            charDelay = randomDelay(30, 80);
+            // micro-pause ekstra setelah spasi (hanya pada slow/normal)
+            if (mult >= 1.0 && Math.random() < 0.10) charDelay += randomDelay(30, 100);
         } else if (/[.,!?;:]/.test(ch)) {
-            charDelay = randomDelay(120, 300);
+            charDelay = randomDelay(50, 120);
         } else {
-            // Burst typing: 15% chance karakter sangat cepat (jari sudah posisi)
-            charDelay = Math.random() < 0.15 ? randomDelay(30, 80) : randomDelay(80, 180);
+            // Burst typing: 15% chance karakter sangat cepat
+            charDelay = Math.random() < 0.15 ? randomDelay(10, 30) : randomDelay(20, 60);
         }
+
+        // Pastikan inputLocator terfokus dan kursor berada di akhir sebelum mengetik karakter ini
+        if (inputLocator) {
+            await inputLocator.evaluate((el) => {
+                // Focus element jika kehilangan fokus
+                if (document.activeElement !== el) {
+                    el.focus();
+                }
+                // Letakkan kursor di paling akhir teks
+                if (el.contentEditable === 'true') {
+                    const range = document.createRange();
+                    const sel = window.getSelection();
+                    range.selectNodeContents(el);
+                    range.collapse(false); // collapse ke akhir
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                } else {
+                    const len = el.value ? el.value.length : 0;
+                    try {
+                        el.setSelectionRange(len, len);
+                    } catch (e) {
+                        // ignore if not supported by input type
+                    }
+                }
+            }).catch(() => {});
+        }
+
         await page.keyboard.type(ch, { delay: 0 }); // type dulu
-        await new Promise(r => setTimeout(r, charDelay)); // baru delay
+        await new Promise(r => setTimeout(r, Math.max(1, Math.round(charDelay * mult)))); // delay × multiplier
     }
 }
 
@@ -568,13 +641,13 @@ async function fillPromptInput(page, inputLocator, text) {
         await page.waitForTimeout(randomDelay(80, 150));
         await page.keyboard.press('Delete');
         await page.waitForTimeout(randomDelay(150, 300));
-        await humanType(page, text);
+        await humanType(page, text, inputLocator);
     } else {
         await inputLocator.click({ clickCount: 3 });
         await page.waitForTimeout(randomDelay(100, 200));
         await page.keyboard.press('Delete');
         await page.waitForTimeout(randomDelay(150, 300));
-        await humanType(page, text);
+        await humanType(page, text, inputLocator);
     }
 }
 
@@ -626,6 +699,43 @@ async function checkPolicyError(page) {
 }
 
 /**
+ * Deteksi error "unusual activity" / "aktivitas tidak biasa" dari Google.
+ * Error ini berbeda dari policy violation — ini adalah rate limit / bot detection.
+ * Return: true jika terdeteksi
+ */
+async function checkUnusualActivityError(page) {
+    try {
+        const unusualTexts = [
+            'aktivitas yang tidak biasa',    // ID: "Kami mendapati aktivitas yang tidak biasa"
+            'unusual activity',              // EN
+            'Pusat Bantuan',                 // ID: tombol "Buka Pusat Bantuan"
+            'Help Center',                   // EN versi link
+        ];
+
+        for (const text of unusualTexts) {
+            const foundInDom = await page.evaluate((searchText) => {
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null
+                );
+                let node;
+                while ((node = walker.nextNode())) {
+                    if (node.textContent.toLowerCase().includes(searchText.toLowerCase())) {
+                        const parent = node.parentElement;
+                        if (parent && parent.offsetParent !== null) return true;
+                    }
+                }
+                return false;
+            }, text).catch(() => false);
+
+            if (foundInDom) return true;
+        }
+    } catch { /* page mungkin sudah tutup */ }
+    return false;
+}
+
+/**
  * Deteksi gambar baru via network response.
  * Return { found, newSrcs, policyBlocked }
  */
@@ -634,6 +744,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
         const collectedUrls = [];
         let batchTimer = null;
         const start = Date.now();
+        const MIN_GEN_TIME_MS = 4500; // AI image generation Google Flow tidak pernah selesai < 4.5 detik
 
         // ── Progress log setiap 15s ──
         const progressInterval = setInterval(() => {
@@ -641,8 +752,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
             log(`  Waiting for generation... ${elapsed}s`);
         }, 15000);
 
-        // ── Polling cek error kebijakan setiap 4 detik ──
-        // Jauh lebih cepat dari menunggu timeout (300 detik)
+        // ── Polling cek error kebijakan, unusual activity, & gambar baru setiap 3 detik ──
         const policyCheckInterval = setInterval(async () => {
             try {
                 if (page.isClosed()) return;
@@ -650,9 +760,38 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
                 if (isBlocked) {
                     log('  🚫 Policy violation detected! Skipping this prompt...', 'WARN');
                     done(false, true);
+                    return;
+                }
+                const isUnusual = await checkUnusualActivityError(page);
+                if (isUnusual) {
+                    log('  🛑 Unusual activity detected by Google! Rate limit hit.', 'WARN');
+                    done(false, false, true); // unusual = true
+                    return;
+                }
+
+                // Abaikan pengecekan gambar DOM sebelum waktu minimum generasi tercapai
+                const elapsed = Date.now() - start;
+                if (elapsed < MIN_GEN_TIME_MS) return;
+
+                // Cek apakah ada gambar baru di DOM (flow-image-tile img)
+                const currentTileImgs = await page.evaluate((before) => {
+                    const imgs = Array.from(document.querySelectorAll('flow-image-tile img, .aisandbox-content img, img'));
+                    return imgs
+                        .map(i => i.src)
+                        .filter(s => s && s.length > 15 && !before.includes(s) && !s.startsWith('data:') && !s.includes('avatar') && !s.includes('profile') && !s.includes('favicon'));
+                }, srcsBefore).catch(() => []);
+
+                for (const tsrc of currentTileImgs) {
+                    if (!collectedUrls.includes(tsrc)) {
+                        collectedUrls.push(tsrc);
+                        log(`  📸 Image ${collectedUrls.length} detected via DOM! (${Math.round(elapsed / 1000)}s)`);
+                        clearTimeout(batchTimer);
+                        // 6 detik setelah gambar TERAKHIR terdeteksi — memberi waktu untuk gambar ke-2, ke-3 dst.
+                        batchTimer = setTimeout(() => done(true, false), 6000);
+                    }
                 }
             } catch { /* abaikan */ }
-        }, 4000);
+        }, 3000);
 
         // ── KeepAlive: setiap 20s bring tab ke depan + emit fake activity ──
         // Ini mencegah Flow berhenti generate saat tab di-background
@@ -675,7 +814,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
         page.on('close', closeHandler);
 
         let settled = false;
-        const done = (found, blocked = false) => {
+        const done = (found, blocked = false, unusual = false) => {
             if (settled) return;
             settled = true;
             clearTimeout(batchTimer);
@@ -687,7 +826,7 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
                 page.off('close', closeHandler);
                 page.off('response', responseHandler);
             } catch { /* page already closed */ }
-            resolve({ found, newSrcs: found ? collectedUrls : [], policyBlocked: blocked });
+            resolve({ found, newSrcs: found ? collectedUrls : [], policyBlocked: blocked, unusualActivity: unusual });
         };
 
         const globalTimer = setTimeout(() => {
@@ -697,16 +836,29 @@ function setupImageDetection(page, srcsBefore, maxWaitMs) {
 
         const responseHandler = (response) => {
             try {
+                const elapsed = Date.now() - start;
+                // Abaikan respons jaringan sebelum batas minimum waktu generasi
+                if (elapsed < MIN_GEN_TIME_MS) return;
+
                 const url = response.url();
+                const isImage = (response.request().resourceType() === 'image') ||
+                                url.includes('googleusercontent.com') ||
+                                url.includes('ggpht.com') ||
+                                url.includes('media.getMediaUrlRedirect') ||
+                                /\.(png|jpg|jpeg|webp)/i.test(url);
                 if (
-                    url.includes('media.getMediaUrlRedirect') &&
+                    isImage &&
+                    !url.includes('avatar') &&
+                    !url.includes('profile') &&
+                    !url.includes('favicon') &&
                     !srcsBefore.includes(url) &&
                     !collectedUrls.includes(url)
                 ) {
                     collectedUrls.push(url);
-                    log(`  📸 Image ${collectedUrls.length} detected via network!`);
+                    log(`  📸 Image ${collectedUrls.length} detected via network! (${Math.round(elapsed / 1000)}s)`);
                     clearTimeout(batchTimer);
-                    batchTimer = setTimeout(() => done(true, false), 2000);
+                    // 6 detik setelah gambar TERAKHIR terdeteksi — memberi waktu untuk gambar ke-2, ke-3 dst.
+                    batchTimer = setTimeout(() => done(true, false), 6000);
                 }
             } catch { /* abaikan */ }
         };
@@ -742,7 +894,6 @@ async function getNewImageElements(page, srcsBefore) {
  */
 async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
     const targetLabels = RESOLUTION_LABELS[imageSize.toLowerCase()] || RESOLUTION_LABELS['2k'];
-    const ctxMenuTimeout = parseInt(process.env.CONTEXT_MENU_TIMEOUT_MS) || 15000;
     const downloadTimeout = parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 300000;
 
     try {
@@ -751,101 +902,133 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         await imgLocator.scrollIntoViewIfNeeded();
         await page.waitForTimeout(300);
 
-        // ── Langkah 1: Klik kanan pada gambar untuk memunculkan context menu ──
         // Restore window jika minimized + bringToFront agar menu muncul
         await restoreWindow(page);
         await page.bringToFront();
-        log('  🖱️  Right click on image...');
-        // Gerak mouse ke gambar secara organik sebelum klik kanan
-        try {
-            const box = await imgLocator.boundingBox();
-            if (box) {
-                const tx = Math.round(box.x + box.width  * (0.25 + Math.random() * 0.5));
-                const ty = Math.round(box.y + box.height * (0.25 + Math.random() * 0.5));
-                await humanMove(page, tx, ty);
-                await new Promise(r => setTimeout(r, randomDelay(100, 250)));
-            }
-        } catch { /* lanjut */ }
-        await imgLocator.click({ button: 'right' });
-        // Tunggu context menu muncul (variasi timing natural)
-        await page.waitForTimeout(randomDelay(600, 1100));
 
-        // ── Langkah 2: Cari item "Download" di context menu dengan selector yang lebih presisi ──
-        // Urutan selector dari yang paling spesifik ke paling umum
+        // ── Langkah 1: Buka context menu ──
+        // Cara 1: Klik kanan pada gambar (cara asli Flow)
+        log('  🖱️  Klik kanan pada gambar...');
+        await imgLocator.click({ button: 'right' });
+        await page.waitForTimeout(800);
+
+        // Cari item "Download" / "Unduh" di context menu
         const downloadMenuSelectors = [
-            // Role-based (paling akurat)
+            // Role-based
             '[role="menuitem"]:has-text("Download")',
+            '[role="menuitem"]:has-text("Unduh")',
             '[role="option"]:has-text("Download")',
+            '[role="option"]:has-text("Unduh")',
+            // Class Angular Material
+            '.mat-mdc-menu-item:has-text("Download")',
+            '.mat-mdc-menu-item:has-text("Unduh")',
             // Tag-based
             'li[class*="menu"]:has-text("Download")',
+            'li[class*="menu"]:has-text("Unduh")',
             'li:has-text("Download")',
-            // Button
+            'li:has-text("Unduh")',
             'button:has-text("Download")',
-            // Div leaf-node (tidak punya child div dengan teks Download)
+            'button:has-text("Unduh")',
             'div[class*="item"]:has-text("Download")',
-            'div[class*="menu"]:has-text("Download")',
-            // Fallback paling umum
+            'div[class*="item"]:has-text("Unduh")',
             'span:has-text("Download")',
+            'span:has-text("Unduh")',
         ];
 
         let downloadMenuItem = null;
         for (const sel of downloadMenuSelectors) {
             try {
-                // Pakai filter visible agar tidak menangkap elemen tersembunyi
-                const candidates = page.locator(sel).filter({ hasText: /^Download$|Download/ });
+                const candidates = page.locator(sel);
                 const count = await candidates.count();
-                if (count > 0) {
-                    // Pilih yang visible
-                    for (let ci = 0; ci < count; ci++) {
-                        const el = candidates.nth(ci);
-                        if (await el.isVisible()) {
-                            downloadMenuItem = el;
-                            break;
-                        }
-                    }
-                    if (downloadMenuItem) {
-                        log(`  📋 "Download" menu found via: ${sel}`);
+                for (let ci = 0; ci < count; ci++) {
+                    const el = candidates.nth(ci);
+                    if (await el.isVisible()) {
+                        downloadMenuItem = el;
+                        log(`  📋 Menu "Download" ditemukan via: ${sel}`);
                         break;
                     }
                 }
+                if (downloadMenuItem) break;
             } catch { /* coba selector berikutnya */ }
         }
 
+        // Fallback: Jika klik kanan tidak memunculkan menu, coba tombol ⋮ (Opsi lainnya)
         if (!downloadMenuItem) {
-            log('  ⚠️  "Download" menu not found after right click.', 'WARN');
-            await page.keyboard.press('Escape');
+            log('  ⚠️  Menu tidak muncul via klik kanan, mencoba tombol ⋮ (Opsi lainnya)...');
+            try {
+                await imgLocator.hover({ force: true });
+                await page.waitForTimeout(500);
+
+                const threeDotCandidates = [
+                    'button[aria-label*="Opsi"]',
+                    'button[aria-label*="opsi"]',
+                    'button[aria-label*="More"]',
+                    'button[aria-label*="more"]',
+                    'button:has(mat-icon:has-text("more_vert"))',
+                    'button.mat-mdc-icon-button:has(mat-icon)',
+                ];
+
+                for (const sel of threeDotCandidates) {
+                    try {
+                        const btn = page.locator(sel).first();
+                        if (await btn.isVisible()) {
+                            await btn.click({ force: true });
+                            await page.waitForTimeout(800);
+                            break;
+                        }
+                    } catch { /* next */ }
+                }
+
+                // Cari ulang menu Download
+                for (const sel of downloadMenuSelectors) {
+                    try {
+                        const candidates = page.locator(sel);
+                        const count = await candidates.count();
+                        for (let ci = 0; ci < count; ci++) {
+                            const el = candidates.nth(ci);
+                            if (await el.isVisible()) {
+                                downloadMenuItem = el;
+                                log(`  📋 Menu "Download" ditemukan via ⋮ menu: ${sel}`);
+                                break;
+                            }
+                        }
+                        if (downloadMenuItem) break;
+                    } catch { /* next */ }
+                }
+            } catch { /* abaikan fallback three-dot */ }
+        }
+
+        if (!downloadMenuItem) {
+            log('  ⚠️  Menu "Download" tidak ditemukan setelah klik kanan.', 'WARN');
+            await page.keyboard.press('Escape').catch(() => {});
             return false;
         }
 
-        // ── Langkah 3: Hover item "Download" untuk memunculkan submenu resolusi ──
-        log('  🖱️  Hovering over "Download" to open resolution submenu...');
-        // Gerak mouse ke item Download secara organik
-        try {
-            const box = await downloadMenuItem.boundingBox();
-            if (box) {
-                const tx = Math.round(box.x + box.width  * (0.2 + Math.random() * 0.6));
-                const ty = Math.round(box.y + box.height * (0.2 + Math.random() * 0.6));
-                await humanMove(page, tx, ty);
-            }
-        } catch { /* fallback ke hover biasa */ }
+        // ── Langkah 2: Buka submenu resolusi ──
+        log('  🖱️  Membuka submenu resolusi...');
         await downloadMenuItem.hover({ force: true });
-        // Tunggu submenu muncul — variasi natural
-        await page.waitForTimeout(randomDelay(700, 1300));
+        await page.waitForTimeout(600);
 
-        // ── Langkah 4: Cari dan klik opsi resolusi target (misal "2K") ──
-        log(`  🔍 Searching for resolution option "${imageSize.toUpperCase()}" in submenu...`);
+        // Jika submenu belum terbuka, coba klik menuItem-nya
+        const subCount = await page.locator('.cdk-overlay-container [role="menuitem"]').count().catch(() => 0);
+        if (subCount <= 1) {
+            await downloadMenuItem.click({ force: true }).catch(() => {});
+            await page.waitForTimeout(800);
+        }
+
+        // ── Langkah 3: Cari dan klik opsi resolusi target (misal "2K") ──
+        log(`  🔍 Mencari opsi resolusi "${imageSize.toUpperCase()}" di submenu...`);
         let resolutionItem = null;
 
         for (const label of targetLabels) {
             const candidates = [
-                // Role-based
                 `[role="menuitem"]:has-text("${label}")`,
                 `[role="option"]:has-text("${label}")`,
-                // Tidak Upgrade (4K terkunci)
+                `.mat-mdc-menu-item:has-text("${label}")`,
                 `li:has-text("${label}"):not(:has-text("Upgrade"))`,
-                // Div / span
                 `div[class*="item"]:has-text("${label}")`,
                 `span:has-text("${label}")`,
+                `*:has-text("${label}")`,
             ];
 
             for (const sel of candidates) {
@@ -854,11 +1037,12 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
                     const cnt = await els.count();
                     for (let ci = 0; ci < cnt; ci++) {
                         const el = els.nth(ci);
-                        if (await el.isVisible()) {
-                            resolutionItem = el;
-                            log(`  ✅ Option "${label}" found via: ${sel}`);
-                            break;
-                        }
+                        if (!await el.isVisible()) continue;
+                        const txt = await el.textContent().catch(() => '');
+                        if (txt.toLowerCase().includes('upgrade')) continue;
+                        resolutionItem = el;
+                        log(`  ✅ Opsi resolusi "${label}" ditemukan via: ${sel}`);
+                        break;
                     }
                     if (resolutionItem) break;
                 } catch { /* coba berikutnya */ }
@@ -867,131 +1051,133 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
         }
 
         if (!resolutionItem) {
-            log(`  ⚠️  Resolution option "${imageSize.toUpperCase()}" not found in submenu.`, 'WARN');
-            await page.keyboard.press('Escape');
+            log(`  ⚠️  Opsi resolusi "${imageSize.toUpperCase()}" tidak ditemukan di submenu.`, 'WARN');
+            await page.keyboard.press('Escape').catch(() => {});
             return false;
         }
 
-        // ── Langkah 5: Intercept URL download SEBELUM klik resolusi ──
-        // Strategi: tangkap URL final dari request yang dipicu klik "2K",
-        // lalu fetch langsung — tanpa saveAs, tanpa dialog, 100% background-safe.
-        log(`  ⏳ Waiting for download URL (timeout: ${Math.round(downloadTimeout / 1000)}s)...`);
-
+        // ── Langkah 4: Intercept URL download & Klik resolusi ──
+        log(`  ⏳ Menyiapkan download resolusi "${imageSize.toUpperCase()}"...`);
         let resolvedDownloadUrl = null;
 
-        // Intercept via 'requestfinished' — tangkap URL setelah semua redirect selesai
-        const requestHandler = async (request) => {
+        const requestHandler = (request) => {
             try {
                 const url = request.url();
-                const resourceType = request.resourceType();
-                // Flow mengirim file gambar sebagai 'document' atau 'other' saat download
                 if (
-                    resourceType !== 'script' &&
-                    resourceType !== 'stylesheet' &&
-                    resourceType !== 'image' &&
-                    (
-                        url.includes('ggpht.com') ||
-                        url.includes('googleusercontent.com') ||
-                        url.includes('lh3.google') ||
-                        url.includes('export') ||
-                        url.includes('media.getMediaUrlRedirect') ||
-                        /\.(png|jpg|jpeg|webp)/i.test(url)
-                    )
+                    (url.includes('ggpht.com') ||
+                     url.includes('googleusercontent.com') ||
+                     url.includes('lh3.google') ||
+                     url.includes('export') ||
+                     url.includes('media.getMediaUrlRedirect') ||
+                     /\.(png|jpg|jpeg|webp)(\?|$)/i.test(url)) &&
+                    !url.includes('avatar') && !url.includes('favicon') && !url.includes('profile')
                 ) {
                     resolvedDownloadUrl = url;
                 }
             } catch { /* abaikan */ }
         };
 
-        // Juga intercept Playwright download event sebagai backup
-        const downloadPromise = page.waitForEvent('download', { timeout: downloadTimeout }).catch(() => null);
+        const upscaleWaitMs = Math.min(downloadTimeout, 90000); // Batas tunggu proses upscale server (max 90s)
+        const downloadPromise = page.waitForEvent('download', { timeout: upscaleWaitMs }).catch(() => null);
         page.on('requestfinished', requestHandler);
 
-        // ── Langkah 6: Klik opsi resolusi — ini memicu download ──
-        await resolutionItem.click();
-        log(`  🖱️  Clicking "${imageSize.toUpperCase()}" — waiting for download...`);
+        try {
+            await resolutionItem.click({ force: true });
+            log(`  🖱️  Klik "${imageSize.toUpperCase()}" — menunggu proses upscale server Flow (15-30 detik)...`);
 
-        // Tunggu sebentar agar request sempat ditangkap
-        await page.waitForTimeout(3000);
-        page.off('requestfinished', requestHandler);
+            // Tunggu download event atau URL resolusi selesai dengan progress log setiap 5s
+            const waitStart = Date.now();
+            let download = null;
 
-        // ── Metode A: Fetch langsung dari URL yang diintercept (tidak butuh saveAs) ──
-        if (resolvedDownloadUrl) {
-            try {
-                log(`  🔗 Fetching file from: ${resolvedDownloadUrl.substring(0, 80)}...`);
-                // Header lengkap menyerupai browser Chrome asli
-                const resp = await page.request.get(resolvedDownloadUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.156 Safari/537.36',
-                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'sec-ch-ua': '"Google Chrome";v="149", "Chromium";v="149", "Not/A)Brand";v="99"',
-                        'sec-ch-ua-mobile': '?0',
-                        'sec-ch-ua-platform': '"Windows"',
-                        'sec-fetch-dest': 'image',
-                        'sec-fetch-mode': 'no-cors',
-                        'sec-fetch-site': 'cross-site',
-                        'Referer': 'https://labs.google/',
-                    },
-                    timeout: downloadTimeout,
-                });
-                if (resp.ok()) {
-                    const body = await resp.body();
-                    if (body.length > 10000) { // minimal 10KB untuk validasi bukan error page
-                        fs.writeFileSync(filePath, body);
-                        log(`  ✅ Download completed via direct fetch (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
-                        return true;
-                    }
+            while (Date.now() - waitStart < upscaleWaitMs) {
+                // Cek apakah downloadPromise sudah selesai
+                const raceResult = await Promise.race([
+                    downloadPromise,
+                    new Promise(r => setTimeout(() => r('PENDING'), 2000))
+                ]);
+
+                if (raceResult !== 'PENDING') {
+                    download = raceResult;
+                    break;
                 }
-            } catch (fetchErr) {
-                log(`  ⚠️  Direct fetch failed: ${fetchErr.message}`, 'WARN');
-            }
-        }
 
-        // ── Metode B: Playwright download event + saveAs sebagai fallback ──
-        const download = await downloadPromise;
-        if (download) {
-            log(`  💾 Fallback saveAs: ${path.basename(filePath)}`);
-            // Tunggu file temp benar-benar ada sebelum saveAs
-            for (let wi = 0; wi < 10; wi++) {
-                try {
-                    await download.saveAs(filePath);
-                    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-                        log(`  ✅ Download completed via saveAs (${imageSize.toUpperCase()}): ${path.basename(filePath)}`, 'SUCCESS');
-                        return true;
-                    }
-                } catch { /* retry */ }
-                await new Promise(r => setTimeout(r, 1000));
-            }
-        }
+                const elapsed = Math.round((Date.now() - waitStart) / 1000);
+                if (elapsed > 0 && elapsed % 5 === 0) {
+                    log(`  ⏳ Menunggu server Google Flow selesai upscaling ${imageSize.toUpperCase()}... (${elapsed}s)`);
+                }
 
-        // ── Fallback Metode C: dari resolvedDownloadUrl yang sudah di-intercept ──
-        if (resolvedDownloadUrl) {
-            log(`  🔗 Fallback: re-fetching from previously intercepted URL...`);
-            try {
-                const resp = await page.request.get(resolvedDownloadUrl);
-                if (resp.ok()) {
-                    const body = await resp.body();
-                    if (body.length > 10000) {
-                        fs.writeFileSync(filePath, body);
-                        if (fs.statSync(filePath).size > 0) {
-                            log(`  ✅ Download completed via re-fetching intercepted URL: ${path.basename(filePath)}`, 'SUCCESS');
+                if (page.isClosed()) break;
+            }
+
+            // ── Strategi 1: Playwright download event (Paling Utama di Google Flow) ──
+            if (download) {
+                const failure = await download.failure().catch(() => null);
+                if (failure) {
+                    log(`  ⚠️ Browser download event error: ${failure}`, 'WARN');
+                } else {
+                    log(`  💾 Download event diterima, menyimpan file: ${path.basename(filePath)}...`);
+                    const outDir = path.dirname(filePath);
+                    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+                    try {
+                        await download.saveAs(filePath);
+                        if (fs.existsSync(filePath) && fs.statSync(filePath).size > 10000) {
+                            const kb = Math.round(fs.statSync(filePath).size / 1024);
+                            log(`  ✅ Download selesai via saveAs (${imageSize.toUpperCase()}): ${path.basename(filePath)} (${kb} KB)`, 'SUCCESS');
                             return true;
+                        }
+                    } catch (saveErr) {
+                        log(`  ⚠️ saveAs error (${saveErr.message}), mencoba fallback copy dari temp path...`, 'WARN');
+                        try {
+                            const tempPath = await download.path();
+                            if (tempPath && fs.existsSync(tempPath)) {
+                                fs.copyFileSync(tempPath, filePath);
+                                if (fs.existsSync(filePath) && fs.statSync(filePath).size > 10000) {
+                                    const kb = Math.round(fs.statSync(filePath).size / 1024);
+                                    log(`  ✅ Download selesai via temp path (${imageSize.toUpperCase()}): ${path.basename(filePath)} (${kb} KB)`, 'SUCCESS');
+                                    return true;
+                                }
+                            }
+                        } catch (pathErr) {
+                            log(`  ⚠️ download.path() gagal: ${pathErr.message}`, 'WARN');
                         }
                     }
                 }
-            } catch (fetchErr) {
-                log(`  ⚠️  Failed to re-fetch from intercepted URL: ${fetchErr.message}`, 'WARN');
             }
+
+            // ── Strategi 2: Direct fetch dari intercepted URL ──
+            if (resolvedDownloadUrl) {
+                log(`  🔗 Mencoba fetch dari intercepted URL: ${resolvedDownloadUrl.substring(0, 80)}...`);
+                try {
+                    const resp = await page.request.get(resolvedDownloadUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+                        timeout: 30000,
+                    });
+                    if (resp.ok()) {
+                        const body = await resp.body();
+                        if (body.length > 50000) {
+                            const outDir = path.dirname(filePath);
+                            if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+                            fs.writeFileSync(filePath, body);
+                            const kb = Math.round(body.length / 1024);
+                            log(`  ✅ Download selesai via direct fetch (${imageSize.toUpperCase()}): ${path.basename(filePath)} (${kb} KB)`, 'SUCCESS');
+                            return true;
+                        }
+                    }
+                } catch (fetchErr) {
+                    log(`  ⚠️ Direct fetch gagal: ${fetchErr.message}`, 'WARN');
+                }
+            }
+
+            log(`  ⚠️ Download upscale ${imageSize.toUpperCase()} tidak terdeteksi dalam batas waktu ${Math.round(upscaleWaitMs / 1000)}s.`, 'WARN');
+            return false;
+
+        } finally {
+            try { page.off('requestfinished', requestHandler); } catch {}
         }
 
-        log('  ⚠️  Download event not detected after clicking resolution option.', 'WARN');
-        return false;
-
     } catch (err) {
-        log(`  ❌ Error during menu download: ${err.message}`, 'ERROR');
-        // Pastikan menu tertutup
+        log(`  ❌ Error saat download via menu: ${err.message}`, 'ERROR');
         try { await page.keyboard.press('Escape'); } catch {}
         return false;
     }
@@ -999,7 +1185,7 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
 
 /**
  * Fallback: download langsung dari URL network response (tanpa menu).
- * Dipakai jika simulasi klik menu gagal.
+ * Dipakai jika simulasi klik menu gagal atau untuk mode native.
  */
 async function downloadImageDirect(page, src, filePath) {
     if (src.startsWith('blob:')) {
@@ -1044,13 +1230,8 @@ async function downloadImageDirect(page, src, filePath) {
  * 2. Untuk setiap gambar: klik kanan → Download → pilih resolusi dari .env
  * 3. Fallback ke download langsung jika menu gagal
  */
-async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSize, prompt) {
+async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSize) {
     if (newSrcs.length === 0) return 0;
-
-    const failedDir = path.join(outputDir, 'failed');
-    if (!fs.existsSync(failedDir)) fs.mkdirSync(failedDir, { recursive: true });
-    const failedTxtPath = path.join(failedDir, 'failed.txt');
-    let anyFailed = false; // flag: ada gambar yang masuk folder failed?
 
     const sizeSuffix = (!imageSize || imageSize.toLowerCase() === 'native')
         ? ''
@@ -1058,60 +1239,132 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
 
     let downloaded = 0;
 
+    // ── Snapshot semua tile gambar di DOM sebelum mulai loop download ──
+    // Ini diperlukan agar fallback locator tahu berapa total tile yang ada
+    // dan bisa memetakan newSrcs[i] ke tile yang benar (bukan selalu tile terakhir)
+    let tileSnapshot = [];
+    try {
+        const allTiles = page.locator('flow-image-tile img');
+        const tileCount = await allTiles.count();
+        for (let ti = 0; ti < tileCount; ti++) {
+            const el = allTiles.nth(ti);
+            const tsrc = await el.getAttribute('src').catch(() => '');
+            const visible = await el.isVisible().catch(() => false);
+            const box = await el.boundingBox().catch(() => null);
+            if (visible && box && box.width > 80 && box.height > 80) {
+                tileSnapshot.push({ el, src: tsrc || '' });
+            }
+        }
+        log(`  🗂️  Snapshot tile: ${tileSnapshot.length} gambar ditemukan di DOM.`);
+    } catch { /* skip snapshot */ }
+
+    // Jumlah tile baru = jumlah gambar yang baru di-generate pada batch ini
+    // Tile terbaru ada di akhir array (index paling tinggi)
+    // newSrcs[0] = gambar pertama, newSrcs[1] = gambar kedua, dst.
+    // Maka tile yang cocok: tileSnapshot[tileSnapshot.length - newSrcs.length + i]
+    const tileBaseIndex = tileSnapshot.length - newSrcs.length;
+
     for (let i = 0; i < newSrcs.length; i++) {
         const src = newSrcs[i];
-        // Path utama: folder output normal (hanya jika 2K/4K berhasil)
-        const filePath       = path.join(outputDir, `${baseName}${sizeSuffix}_${i + 1}.png`);
-        // Path fallback: folder failed (jika resolusi target gagal)
-        const failedFilePath = path.join(failedDir,  `${baseName}_native_${i + 1}.png`);
-        log(`  Downloading image ${i + 1}/${newSrcs.length} via Flow menu...`);
+        const filePath = path.join(outputDir, `${baseName}${sizeSuffix}_${i + 1}.png`);
+        log(`  Mendownload gambar ${i + 1}/${newSrcs.length}...`);
 
         // ── Cari elemen <img> yang cocok dengan src hasil deteksi network ──
-        // Strategi berlapis karena URL di DOM bisa sedikit berbeda dari URL network response
         let imgLocator = null;
 
-        // Strategi 1: Exact match src
-        const exactMatch = page.locator(`img[src="${src}"]`);
-        if (await exactMatch.count() > 0) {
-            imgLocator = exactMatch.first();
-            log(`  🎯 Image found via exact src match.`);
-        }
-
-        // Strategi 2: Partial URL match (ambil bagian unik dari URL)
-        if (!imgLocator) {
+        // Tunggu hingga elemen gambar benar-benar siap dan visible di DOM (hingga 5 detik)
+        for (let attempt = 0; attempt < 5; attempt++) {
+            // Strategi 1: Exact match src
             try {
-                const urlObj = new URL(src);
-                // Pakai pathname atau sebagian query string yang unik
-                const partialKey = urlObj.pathname.split('/').filter(Boolean).pop() || '';
-                if (partialKey && partialKey.length > 5) {
-                    const partialMatch = page.locator(`img[src*="${partialKey}"]`);
-                    if (await partialMatch.count() > 0) {
-                        imgLocator = partialMatch.first();
-                        log(`  🎯 Image found via partial URL: ...${partialKey}`);
-                    }
-                }
-            } catch { /* URL parsing gagal, skip */ }
-        }
-
-        // Strategi 3: Ambil gambar visible terakhir yang baru muncul di halaman
-        // (Flow selalu append gambar baru di bawah)
-        if (!imgLocator) {
-            try {
-                // Cari semua img yang visible dan bukan icon kecil (width > 100)
-                const allImgs = page.locator('img').filter({ hasNotText: '' });
-                const imgCount = await allImgs.count();
-                for (let ci = imgCount - 1; ci >= Math.max(0, imgCount - 6); ci--) {
-                    const el = allImgs.nth(ci);
-                    if (await el.isVisible()) {
-                        const box = await el.boundingBox();
-                        if (box && box.width > 100 && box.height > 100) {
-                            imgLocator = el;
-                            log(`  🎯 Image found via last-visible fallback (index ${ci}).`);
-                            break;
-                        }
+                const exactMatch = page.locator(`img[src="${src}"]`);
+                if (await exactMatch.count() > 0) {
+                    const el = exactMatch.first();
+                    if (await el.isVisible().catch(() => false)) {
+                        imgLocator = el;
+                        log(`  🎯 Gambar ${i+1}: ditemukan via exact src match.`);
+                        break;
                     }
                 }
             } catch { /* skip */ }
+
+            // Strategi 2: Partial URL match (ambil bagian unik dari URL)
+            if (!imgLocator) {
+                try {
+                    const urlObj = new URL(src);
+                    const partialKey = urlObj.pathname.split('/').filter(Boolean).pop() || '';
+                    if (partialKey && partialKey.length > 5) {
+                        const partialMatch = page.locator(`img[src*="${partialKey}"]`);
+                        if (await partialMatch.count() > 0) {
+                            const el = partialMatch.first();
+                            if (await el.isVisible().catch(() => false)) {
+                                imgLocator = el;
+                                log(`  🎯 Gambar ${i+1}: ditemukan via partial URL: ...${partialKey}`);
+                                break;
+                            }
+                        }
+                    }
+                } catch { /* URL parsing gagal, skip */ }
+            }
+
+            // Strategi 3: Index-aware tile snapshot
+            // Memetakan gambar ke-i ke tile yang sesuai berdasarkan posisi di DOM
+            if (!imgLocator) {
+                try {
+                    const tileIdx = tileBaseIndex + i;
+                    if (tileIdx >= 0 && tileIdx < tileSnapshot.length) {
+                        const snapEl = tileSnapshot[tileIdx].el;
+                        if (await snapEl.isVisible().catch(() => false)) {
+                            imgLocator = snapEl;
+                            log(`  🎯 Gambar ${i+1}: ditemukan via tile snapshot (index ${tileIdx}).`);
+                            break;
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+
+            // Strategi 4: Scan ulang flow-image-tile secara segar dan pilih sesuai index
+            if (!imgLocator) {
+                try {
+                    const freshTiles = page.locator('flow-image-tile img');
+                    const freshCount = await freshTiles.count();
+                    // Estimasi index tile: gambar ke-0 = tile[count-N], gambar ke-1 = tile[count-N+1]
+                    const N = newSrcs.length;
+                    const targetIdx = freshCount - N + i;
+                    if (targetIdx >= 0 && targetIdx < freshCount) {
+                        const el = freshTiles.nth(targetIdx);
+                        if (await el.isVisible().catch(() => false)) {
+                            const box = await el.boundingBox().catch(() => null);
+                            if (box && box.width > 80 && box.height > 80) {
+                                imgLocator = el;
+                                log(`  🎯 Gambar ${i+1}: ditemukan via fresh tile scan (targetIdx ${targetIdx}/${freshCount-1}).`);
+                                break;
+                            }
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+
+            // Strategi 5: Last resort — tile terakhir (untuk kasus single image)
+            if (!imgLocator && newSrcs.length === 1) {
+                try {
+                    const allImgs = page.locator('flow-image-tile img');
+                    const imgCount = await allImgs.count();
+                    if (imgCount > 0) {
+                        const el = allImgs.nth(imgCount - 1);
+                        if (await el.isVisible().catch(() => false)) {
+                            const box = await el.boundingBox().catch(() => null);
+                            if (box && box.width > 100 && box.height > 100) {
+                                imgLocator = el;
+                                log(`  🎯 Gambar ${i+1}: ditemukan via last-tile last-resort.`);
+                                break;
+                            }
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+
+            if (imgLocator) break;
+            await page.waitForTimeout(1000);
         }
 
         let ok = false;
@@ -1119,47 +1372,38 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
         if (imgLocator && imageSize && imageSize.toLowerCase() !== 'native') {
             // ── Utama: Simulasi klik kanan → Download → resolusi target ──
             ok = await downloadViaFlowMenu(page, imgLocator, imageSize, filePath);
+
+            // Jika percobaan pertama gagal, coba sekali lagi setelah jeda singkat
+            if (!ok && !page.isClosed()) {
+                log(`  ⚠️  Percobaan pertama download menu belum berhasil, mencoba sekali lagi...`, 'WARN');
+                await page.waitForTimeout(2000);
+                ok = await downloadViaFlowMenu(page, imgLocator, imageSize, filePath);
+            }
         }
 
         if (!ok) {
-            // ── Fallback: download langsung ke folder FAILED (bukan folder utama) ──
-            log(`  ↩️  Download ${imageSize.toUpperCase()} failed — saving native to failed/ folder...`);
+            // ── Fallback: download langsung dari URL network response ke folder utama ──
+            log(`  ↩️  Fallback ke download langsung (resolusi asli)...`);
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
-                    ok = await downloadImageDirect(page, src, failedFilePath);
-                    if (ok) {
-                        const stat = fs.statSync(failedFilePath);
-                        const kb = Math.round(stat.size / 1024);
-                        log(`  📂 Saved in failed/ (${kb} KB): ${path.basename(failedFilePath)}`, 'WARN');
-                        anyFailed = true;
-                        break;
-                    }
+                    ok = await downloadImageDirect(page, src, filePath);
+                    if (ok) break;
                     if (attempt < 2) await page.waitForTimeout(2000);
                 } catch (err) {
                     if (attempt < 2) await page.waitForTimeout(2000);
-                    else log(`  ❌ Fallback download error: ${err.message}`, 'ERROR');
+                    else log(`  ❌ Error download fallback: ${err.message}`, 'ERROR');
                 }
             }
-            // Gambar failed TIDAK dihitung sebagai sukses di folder utama
-            continue;
         }
 
         if (ok) {
             const stat = fs.statSync(filePath);
             const kb = Math.round(stat.size / 1024);
-            log(`  ✅ Saved ${imageSize.toUpperCase()} (${kb} KB): ${path.basename(filePath)}`, 'SUCCESS');
+            log(`  ✅ Tersimpan (${kb} KB): ${path.basename(filePath)}`, 'SUCCESS');
             downloaded++;
         } else {
-            log(`  ⚠️  Failed to download image ${i + 1} (all methods failed)`, 'WARN');
+            log(`  ⚠️  Gagal download gambar ${i + 1}`, 'WARN');
         }
-    }
-
-    // Jika ada gambar yang masuk folder failed/, catat prompt-nya sekali ke failed.txt
-    if (anyFailed && prompt) {
-        try {
-            fs.appendFileSync(failedTxtPath, prompt + '\n', 'utf-8');
-            log(`  📝 Prompt recorded in failed/failed.txt`);
-        } catch { /* abaikan */ }
     }
 
     return downloaded;
@@ -1381,81 +1625,182 @@ async function runAutomation() {
                         if (!promptInput) throw new Error('Failed to setup new page.');
                     }
 
-                    const srcsBefore = await page.evaluate(() =>
-                        Array.from(document.querySelectorAll('img')).map(img => img.src)
-                    );
+                    // ── Retry loop khusus policy error (terpisah dari retry umum) ──
+                    const MAX_POLICY_RETRIES = 5;
+                    let policyRetryCount = 0;
+                    let attemptSuccess = false;
 
-                    // Restore window jika minimized + bringToFront sebelum ketik prompt
-                    await restoreWindow(page);
-                    await page.bringToFront();
-                    
-                    // Pastikan Agen selalu nonaktif (OFF)
-                    await ensureAgentOff(page, 1000);
+                    while (true) {
+                        const srcsBefore = await page.evaluate(() =>
+                            Array.from(document.querySelectorAll('img')).map(img => img.src)
+                        );
 
-                    await fillPromptInput(page, promptInput, prompt);
-                    await page.waitForTimeout(randomDelay(400, 700));
+                        // Restore window jika minimized + bringToFront sebelum ketik prompt
+                        await restoreWindow(page);
+                        await page.bringToFront();
 
-                    // Setup deteksi network SEBELUM Enter
-                    const dlTimeoutMs = parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 300000;
-                    const detectionPromise = setupImageDetection(page, srcsBefore, dlTimeoutMs);
-                    await page.keyboard.press('Enter');
-                    log('  Generation started...');
+                        // Pastikan Agen selalu nonaktif (OFF)
+                        await ensureAgentOff(page, 1000);
 
-                    const { found: resultFound, newSrcs, policyBlocked } = await detectionPromise;
+                        await fillPromptInput(page, promptInput, prompt);
+                        await page.waitForTimeout(randomDelay(400, 700));
 
-                    // ── Jika Google Flow memblokir prompt karena kebijakan konten ──
-                    if (policyBlocked) {
-                        log(`  🚫 Prompt blocked by Google policy. Skipping...\n`, 'WARN');
-                        // Catat prompt yang diblokir ke file
-                        const blockedDir  = path.join(OUTPUT_DIR, 'failed');
-                        const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
-                        try {
-                            if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
-                            fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
-                            log(`  📝 Blocked prompt saved to failed/policy_blocked.txt`);
-                        } catch { /* abaikan */ }
-                        // Tandai sebagai "selesai" agar tidak diulang saat resume
-                        completed.add(prompt);
-                        saveProgress(completed);
-                        success = true; // keluar dari retry loop
-                        break;
-                    }
+                        // Setup deteksi network SEBELUM Enter & submit
+                        const dlTimeoutMs = parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 300000;
+                        const detectionPromise = setupImageDetection(page, srcsBefore, dlTimeoutMs);
 
-                    const timestamp = Date.now();
-                    const safeName = prompt.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 40);
-                    const baseName = `${safeName}_${timestamp}`;
+                        // Tekan Enter & klik tombol submit ("Mulai pembuatan" / arrow icon)
+                        await page.keyboard.press('Enter');
+                        await page.waitForTimeout(300);
 
-                    if (resultFound) {
-                        await page.waitForTimeout(1500);
-                        const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR, imageSize, prompt);
-                        if (dlCount > 0) {
-                            log(`  ✅ ${dlCount} images downloaded to main folder.\n`, 'SUCCESS');
-                            completed.add(prompt);
-                            saveProgress(completed);
-                            success = true;
-                            break;
-                        }
-                        if (attempt < maxRetries) {
-                            log(`  ⚠️  Download ${imageSize.toUpperCase()} failed (attempt ${attempt}), retrying...\n`, 'WARN');
-                        }
-                    } else {
-                        // Cek sekali lagi secara sinkron sebelum declare timeout
-                        const finalCheck = await checkPolicyError(page);
-                        if (finalCheck) {
-                            log(`  🚫 Policy error confirmed on final check. Skipping prompt...\n`, 'WARN');
-                            const blockedDir  = path.join(OUTPUT_DIR, 'failed');
-                            const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
+                        const submitCandidates = [
+                            'button:has-text("Mulai pembuatan")',
+                            'button[aria-label*="Mulai pembuatan"]',
+                            'button[aria-label*="mulai pembuatan"]',
+                            'button:has-text("Buat")',
+                            'button[aria-label*="Buat"]',
+                            'button:has-text("Generate")',
+                            'button[aria-label*="Generate"]',
+                            'button:has-text("Create")',
+                            'button[aria-label*="Create"]',
+                            'button[aria-label*="Submit"]',
+                            'button:has(mat-icon:has-text("arrow_forward"))',
+                            'button:has(mat-icon:has-text("send"))',
+                            'button:has(mat-icon:has-text("play_arrow"))',
+                            'button.run-button',
+                            'button.submit-button',
+                            'button.send-button',
+                        ];
+
+                        for (const sel of submitCandidates) {
                             try {
-                                if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
-                                fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
-                            } catch { /* abaikan */ }
-                            completed.add(prompt);
-                            saveProgress(completed);
-                            success = true;
-                            break;
+                                const btn = page.locator(sel).first();
+                                if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
+                                    await btn.click({ force: true });
+                                    log(`  🚀 Submit button clicked: ${sel}`);
+                                    break;
+                                }
+                            } catch {}
                         }
-                        log(`  ⚠️  Timeout on attempt ${attempt} — no images detected.\n`, 'WARN');
+
+                        log('  Generation started...');
+
+                        const { found: resultFound, newSrcs, policyBlocked, unusualActivity } = await detectionPromise;
+
+                        // ── Jika Google mendeteksi "unusual activity" (rate limit / bot detection) ──
+                        if (unusualActivity) {
+                            const cooldownMs = randomDelay(300000, 600000); // 5–10 menit cooldown
+                            log(`  🛑 Google unusual activity detected! Cooling down for ${Math.round(cooldownMs / 60000)} minutes...`, 'WARN');
+                            try { await page.waitForTimeout(cooldownMs); } catch { await new Promise(r => setTimeout(r, cooldownMs)); }
+                            // Reload halaman setelah cooldown
+                            try {
+                                await page.reload({ waitUntil: 'load', timeout: timeoutMs });
+                                await page.waitForTimeout(3000);
+                                await setupNewProject(page);
+                                promptInput = await waitForFlowReady(page, 60000);
+                            } catch { /* lanjut retry */ }
+                            continue; // ulang while loop
+                        }
+
+                        // ── Jika Google Flow memblokir prompt karena kebijakan konten ──
+                        if (policyBlocked) {
+                            policyRetryCount++;
+                            log(`  🚫 Policy violation detected (retry ${policyRetryCount}/${MAX_POLICY_RETRIES}). Clearing and retrying prompt...`, 'WARN');
+
+                            if (policyRetryCount >= MAX_POLICY_RETRIES) {
+                                // Melebihi batas retry policy → catat dan skip
+                                log(`  🚫 Policy block persists after ${MAX_POLICY_RETRIES} retries. Skipping prompt.\n`, 'WARN');
+                                const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                                const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
+                                try {
+                                    if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                                    fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                                    log(`  📝 Blocked prompt saved to failed/policy_blocked.txt`);
+                                } catch { /* abaikan */ }
+                                completed.add(prompt);
+                                saveProgress(completed);
+                                success = true;
+                                break;
+                            }
+
+                            // Bersihkan input dan tunggu sebelum retry
+                            try {
+                                await page.keyboard.press('Escape');
+                                await page.waitForTimeout(500);
+                                // Klik input & clear
+                                await promptInput.click();
+                                await page.waitForTimeout(300);
+                                await page.keyboard.press('Control+a');
+                                await page.waitForTimeout(200);
+                                await page.keyboard.press('Delete');
+                                await page.waitForTimeout(randomDelay(10000, 20000)); // Jeda 10-20s sebelum retry
+                            } catch { /* lanjut */ }
+                            continue; // ulang while loop (retry prompt yang sama)
+                        }
+
+                        // ── Tidak ada policy error: proses hasil generate ──
+                        const timestamp = Date.now();
+                        const safeName = prompt.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 40);
+                        const baseName = `${safeName}_${timestamp}`;
+
+                        if (resultFound) {
+                            // ── Tunggu sebentar agar gambar fully rendered sebelum download ──
+                            await page.waitForTimeout(1500);
+
+                            // ── Download semua gambar SAMPAI SELESAI sebelum lanjut ──
+                            log('  ⬇️  Mendownload gambar...');
+                            const dlCount = await downloadAllNewImages(page, newSrcs, baseName, OUTPUT_DIR, imageSize);
+
+                            if (dlCount > 0) {
+                                log(`  ✅ ${dlCount} gambar didownload.\n`, 'SUCCESS');
+                                completed.add(prompt);
+                                saveProgress(completed);
+                                success = true;
+                                attemptSuccess = true;
+                                break; // keluar dari while (policy retry) loop
+                            }
+                            if (attempt < maxRetries) {
+                                log(`  ⚠️  Download gagal (attempt ${attempt}), mencoba lagi...\n`, 'WARN');
+                            }
+                        } else {
+                            // Cek sekali lagi secara sinkron sebelum declare timeout
+                            const finalCheck = await checkPolicyError(page);
+                            if (finalCheck) {
+                                policyRetryCount++;
+                                log(`  🚫 Policy error confirmed on final check (retry ${policyRetryCount}/${MAX_POLICY_RETRIES})...`, 'WARN');
+                                if (policyRetryCount >= MAX_POLICY_RETRIES) {
+                                    log(`  🚫 Policy block persists. Skipping prompt.\n`, 'WARN');
+                                    const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                                    const blockedFile = path.join(blockedDir, 'policy_blocked.txt');
+                                    try {
+                                        if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                                        fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                                    } catch { /* abaikan */ }
+                                    completed.add(prompt);
+                                    saveProgress(completed);
+                                    success = true;
+                                    break;
+                                }
+                                // Jeda sebelum retry
+                                try {
+                                    await page.keyboard.press('Escape');
+                                    await page.waitForTimeout(500);
+                                    await promptInput.click();
+                                    await page.waitForTimeout(300);
+                                    await page.keyboard.press('Control+a');
+                                    await page.waitForTimeout(200);
+                                    await page.keyboard.press('Delete');
+                                    await page.waitForTimeout(randomDelay(10000, 20000));
+                                } catch { /* lanjut */ }
+                                continue; // retry prompt dari while loop
+                            }
+                            log(`  ⚠️  Timeout on attempt ${attempt} — no images detected.\n`, 'WARN');
+                        }
+
+                        break; // keluar dari while loop jika tidak ada policy error
                     }
+
+                    if (success || attemptSuccess) break; // keluar dari for (attempt) loop
 
                 } catch (err) {
                     const msg = err.message || '';

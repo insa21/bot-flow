@@ -1152,7 +1152,7 @@
         <!-- Drawer Header -->
         <div class="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/[0.01]">
             <div class="flex items-center gap-3">
-                <span class="p-2 rounded-lg bg-[#fbbf24]/10 text-[#fbbf24] border border-[#fbbf24]/20">
+                <span class="p-2 rounded-lg bg-accent2/10 text-accent2 border border-accent2/20">
                     <svg viewBox="0 0 24 24" fill="none" width="16" height="16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 20h9M3 20h3M3 12h18M3 4h18"/>
                     </svg>
@@ -1176,6 +1176,13 @@
                 0 lines
             </span>
             <div class="flex gap-2">
+                <button id="btn-sess-pause" class="toolbar-btn flex items-center gap-1.5" title="Pause log stream (freeze UI)" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                    <span>Pause</span>
+                </button>
                 <button id="btn-sess-autoscroll" class="toolbar-btn toolbar-btn-active flex items-center gap-1.5" title="Toggle Auto-Scroll" style="font-size: 10px; padding: 4px 8px; border-radius: 6px;">
                     <svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="5" y="2" width="14" height="20" rx="7" />
@@ -1264,7 +1271,7 @@
                     <span id="sess-log-stat-error" class="font-bold text-[#ef4444] font-mono">0</span>
                 </div>
             </div>
-            <div class="flex items-center gap-1 text-[#10b981]">
+            <div id="sess-log-live-status" class="flex items-center gap-1 text-[#10b981]">
                 <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
                 <span class="font-mono" style="font-size: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Parallel Live</span>
             </div>
