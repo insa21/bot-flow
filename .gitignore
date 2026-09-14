@@ -21,6 +21,10 @@ output/
 browser_session/
 browser_session_gui/
 
+# Data sesi Electron runtime (cookies, cache, Local Storage)
+electron_userdata/
+gui/electron_userdata/
+
 # Konfigurasi environment lokal (sensitif)
 .env
 .env*.local
