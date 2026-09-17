@@ -94,7 +94,8 @@ function setupAccountHandlers(ipcMain, mainWin) {
         const data = readAccounts();
         let changed = false;
         data.accounts = data.accounts.map(acc => {
-            if (acc.sessionDir) {
+            // Hanya baca dari Preferences jika email atau avatar belum tersimpan
+            if (acc.sessionDir && (!acc.email || !acc.avatar)) {
                 const email  = readEmailFromSession(acc.sessionDir);
                 const avatar = readAvatarFromSession(acc.sessionDir);
                 if (email && email !== acc.email) { acc.email = email; changed = true; }

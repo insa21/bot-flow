@@ -192,10 +192,10 @@ function saveProgress(completed) {
 // ── Cek apakah browser context masih hidup ──
 async function isContextAlive(context) {
     try {
+        if (!context) return false;
         const pages = context.pages();
         if (pages.length === 0) return true; // context ada, belum ada page
-        await pages[0].evaluate(() => true);
-        return true;
+        return pages.some(p => !p.isClosed());
     } catch {
         return false;
     }
@@ -707,9 +707,9 @@ async function checkUnusualActivityError(page) {
     try {
         const unusualTexts = [
             'aktivitas yang tidak biasa',    // ID: "Kami mendapati aktivitas yang tidak biasa"
-            'unusual activity',              // EN
-            'Pusat Bantuan',                 // ID: tombol "Buka Pusat Bantuan"
-            'Help Center',                   // EN versi link
+            'unusual activity',              // EN: "We have detected unusual activity"
+            'unusual traffic',               // EN: "unusual traffic from your computer network"
+            'lalu lintas yang tidak biasa',  // ID variasi
         ];
 
         for (const text of unusualTexts) {
@@ -1414,7 +1414,7 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
 // ============================================================
 async function isPageAlive(page) {
     try {
-        await page.evaluate(() => true);
+        if (!page || page.isClosed()) return false;
         return true;
     } catch {
         return false;
@@ -1628,8 +1628,9 @@ async function runAutomation() {
                     // ── Retry loop khusus policy error (terpisah dari retry umum) ──
                     const MAX_POLICY_RETRIES = 5;
                     let policyRetryCount = 0;
+                    const MAX_UNUSUAL_RETRIES = 2;
+                    let unusualRetryCount = 0;
                     let attemptSuccess = false;
-
                     while (true) {
                         const srcsBefore = await page.evaluate(() =>
                             Array.from(document.querySelectorAll('img')).map(img => img.src)
@@ -1689,8 +1690,24 @@ async function runAutomation() {
 
                         // ── Jika Google mendeteksi "unusual activity" (rate limit / bot detection) ──
                         if (unusualActivity) {
-                            const cooldownMs = randomDelay(300000, 600000); // 5–10 menit cooldown
-                            log(`  🛑 Google unusual activity detected! Cooling down for ${Math.round(cooldownMs / 60000)} minutes...`, 'WARN');
+                            unusualRetryCount++;
+                            if (unusualRetryCount > MAX_UNUSUAL_RETRIES) {
+                                log(`  🛑 Google unusual activity persists after ${MAX_UNUSUAL_RETRIES} attempts. Skipping prompt to avoid infinite reload loop.\n`, 'WARN');
+                                const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                                const blockedFile = path.join(blockedDir, 'unusual_activity.txt');
+                                try {
+                                    if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                                    fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                                    log(`  📝 Prompt saved to failed/unusual_activity.txt`);
+                                } catch { /* abaikan */ }
+                                completed.add(prompt);
+                                saveProgress(completed);
+                                success = true;
+                                break;
+                            }
+
+                            const cooldownMs = randomDelay(180000, 300000); // 3–5 menit cooldown
+                            log(`  🛑 Google unusual activity detected (retry ${unusualRetryCount}/${MAX_UNUSUAL_RETRIES})! Cooling down for ${Math.round(cooldownMs / 60000)} minutes...`, 'WARN');
                             try { await page.waitForTimeout(cooldownMs); } catch { await new Promise(r => setTimeout(r, cooldownMs)); }
                             // Reload halaman setelah cooldown
                             try {
@@ -1804,23 +1821,27 @@ async function runAutomation() {
 
                 } catch (err) {
                     const msg = err.message || '';
-                    const isCtxDead = 
-                        msg.includes('closed') || 
-                        msg.includes('Target page') || 
+                    const isFatalClosed = 
+                        msg.includes('Target page, context or browser has been closed') || 
                         msg.includes('browser has been closed') || 
-                        msg.includes('context') ||
-                        msg.includes('connection closed') ||
-                        msg.includes('Protocol error');
+                        msg.includes('Browser closed') || 
+                        msg.includes('Target closed') || 
+                        msg.includes('connection closed') || 
+                        msg.includes('Protocol error: Connection closed');
                     log(`  ❌ Attempt ${attempt} error: ${msg}`, 'ERROR');
 
-                    if (isCtxDead) {
-                        log('  🔄 Context/browser dead (possibly closed by user). Relaunching browser and retrying this prompt...', 'WARN');
-                        try {
-                            await initBrowser();
-                            attempt--; // Decrement attempt to retry the same prompt attempt
-                        } catch (re) {
-                            log(`  ❌ Relaunch failed: ${re.message}`, 'ERROR');
-                            if (re.message.includes('relaunch')) throw re; // batas relaunch tercapai
+                    if (isFatalClosed) {
+                        const reallyDead = !await isContextAlive(context);
+                        if (reallyDead) {
+                            log('  🔄 Browser context is closed. Relaunching browser and retrying this prompt...', 'WARN');
+                            try {
+                                await initBrowser();
+                            } catch (re) {
+                                log(`  ❌ Relaunch failed: ${re.message}`, 'ERROR');
+                                if (re.message.includes('relaunch')) throw re; // batas relaunch tercapai
+                            }
+                        } else {
+                            log('  ℹ️ Browser context is still alive, skipping unnecessary relaunch.', 'INFO');
                         }
                     } else if (attempt < maxRetries) {
                         await new Promise(r => setTimeout(r, randomDelay(3000, 6000)));

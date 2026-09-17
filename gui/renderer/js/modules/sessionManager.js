@@ -29,6 +29,14 @@ function esc(s) {
 }
 function pct(cur, tot) { return (!tot) ? 0 : Math.min(100, Math.round((cur / tot) * 100)); }
 function catColor(idx) { return CATEGORY_COLORS[idx % CATEGORY_COLORS.length]; }
+const ICONS = {
+    reset: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`,
+    stop: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg>`,
+    start: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>`,
+    delete: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+    log: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`,
+};
+
 
 /** Buat satu kartu kategori dengan visual minimalis premium (Apple Style) */
 function buildCard(sess, idx, accounts) {
@@ -58,13 +66,11 @@ function buildCard(sess, idx, accounts) {
         ? `<span class="sess-path-display" title="${esc(sess.outputDir)}">${esc(sess.outputDir)}</span>`
         : `<span style="color:#6e7a90;font-style:italic;">Not selected (Auto-created on start)</span>`;
 
-    // Modern SVGs
-    const resetIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
-    const stopIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg>`;
-    const startIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>`;
-    const deleteIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-    const logIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
-
+    const resetIcon  = ICONS.reset;
+    const stopIcon   = ICONS.stop;
+    const startIcon  = ICONS.start;
+    const deleteIcon = ICONS.delete;
+    const logIcon    = ICONS.log;
     return `
     <div class="sess-card ${isRunning ? 'sess-card--running' : ''}" data-session-id="${esc(sess.id)}" data-idx="${idx}" style="--cat-color: ${color};">
 
@@ -251,24 +257,25 @@ export async function setupSessionManager() {
 
     let sessions = [];
     let accounts = [];
+    let accountsCache = null;
 
-    // ── Render semua kartu & Update Statistik Global ──────────────────────────
-    async function refresh(incoming) {
-        sessions = incoming ?? await api.sessionList().catch(() => []);
-        const ad = await api.accountList().catch(() => ({ accounts: [] }));
-        accounts = ad.accounts || [];
+    async function getAccounts(force = false) {
+        if (!accountsCache || force) {
+            const ad = await api.accountList().catch(() => ({ accounts: [] }));
+            accountsCache = ad.accounts || [];
+        }
+        return accountsCache;
+    }
 
-        // Ekspos sessions ke window agar activityLog bisa membaca daftar kategori
-        window.currentSessionsList = sessions;
-
-        const running = sessions.filter(s => s.status === 'running').length;
-        if (countBadge) countBadge.textContent = `${sessions.length} categories`;
+    // ── Update Statistik Global tanpa re-render DOM ──────────────────────────
+    function updateGlobalStats(sessionsList) {
+        const running = sessionsList.filter(s => s.status === 'running').length;
+        if (countBadge) countBadge.textContent = `${sessionsList.length} categories`;
         if (runBadge) {
             runBadge.style.display = running > 0 ? 'inline-flex' : 'none';
             runBadge.textContent = running;
         }
 
-        // 📊 ─── UPDATE STATISTIK GLOBAL ───
         const statActive = document.getElementById('stat-active-sessions');
         const statTotal  = document.getElementById('stat-total-sessions');
         const statTxt    = document.getElementById('stat-global-progress-txt');
@@ -279,7 +286,7 @@ export async function setupSessionManager() {
         let totalTotal   = 0;
         let maxSessionETA = 0;
 
-        sessions.forEach(s => {
+        sessionsList.forEach(s => {
             totalCurrent += s.progress?.current || 0;
             totalTotal   += s.progress?.total || 0;
 
@@ -299,7 +306,7 @@ export async function setupSessionManager() {
         });
 
         if (statActive) statActive.textContent = running;
-        if (statTotal)  statTotal.textContent = sessions.length;
+        if (statTotal)  statTotal.textContent = sessionsList.length;
         if (statTxt)    statTxt.textContent = `${totalCurrent} / ${totalTotal}`;
         if (statFill) {
             const globalPct = totalTotal ? Math.round((totalCurrent / totalTotal) * 100) : 0;
@@ -320,7 +327,82 @@ export async function setupSessionManager() {
                 statETA.style.color = '#fbbf24';
             }
         }
-        // ───────────────────────────────
+    }
+
+    // ── Update satu kartu secara in-place tanpa menghapus elemen DOM ─────────
+    function updateCardInPlace(card, sess) {
+        const isRunning = sess.status === 'running';
+        const isDone    = sess.status === 'completed';
+        const st        = STATUS_LABEL[sess.status] || STATUS_LABEL.idle;
+        const progress  = pct(sess.progress?.current, sess.progress?.total);
+
+        card.classList.toggle('sess-card--running', isRunning);
+
+        const statusPill = card.querySelector('.sess-status-pill');
+        if (statusPill) {
+            statusPill.textContent = st.text;
+            statusPill.style.color = st.color;
+            statusPill.style.borderColor = st.border;
+            statusPill.style.background = st.bg;
+        }
+
+        const progressFill = card.querySelector('.sess-progress-fill');
+        if (progressFill) {
+            progressFill.style.width = `${progress}%`;
+            progressFill.classList.toggle('sess-progress-fill--animated', isRunning);
+        }
+
+        const progressTxt = card.querySelector('.sess-progress-text');
+        if (progressTxt) {
+            progressTxt.textContent = sess.progress?.total
+                ? `Completed: ${sess.progress.current} / ${sess.progress.total} (${progress}%)`
+                : (isRunning ? 'Starting...' : '—');
+        }
+
+        // Nonaktifkan / aktifkan input saat running
+        card.querySelectorAll('.sess-select, .sess-name-input, .sess-pill-btn').forEach(el => {
+            el.disabled = isRunning;
+        });
+
+        // Update tombol start/stop
+        const startBtn = card.querySelector('.sess-btn-start');
+        const stopBtn  = card.querySelector('.sess-btn-stop');
+        if (isRunning && startBtn) {
+            startBtn.className = 'sess-btn-sm sess-btn-stop flex items-center justify-center';
+            startBtn.title = 'Stop process';
+            startBtn.style.cssText = '';
+            startBtn.disabled = false;
+            startBtn.innerHTML = ICONS.stop;
+        } else if (!isRunning && stopBtn) {
+            stopBtn.className = 'sess-btn-sm sess-btn-start flex items-center justify-center';
+            stopBtn.title = isDone ? 'Already completed' : 'Start process';
+            stopBtn.disabled = isDone;
+            stopBtn.style.cssText = isDone ? '' : 'color:#10b981; border-color:rgba(16,185,129,0.2); background:rgba(16,185,129,0.03);';
+            stopBtn.innerHTML = ICONS.start;
+        }
+    }
+
+    // ── Render semua kartu & Update Statistik Global ──────────────────────────
+    async function refresh(incoming, forceRender = false) {
+        sessions = incoming ?? await api.sessionList().catch(() => []);
+        window.currentSessionsList = sessions;
+
+        // Cek apakah kartu DOM sudah ada dan strukturnya sama persis (bisa update in-place)
+        const existingCards = container.querySelectorAll('.sess-card');
+        const canUpdateInPlace = !forceRender &&
+            existingCards.length === sessions.length &&
+            sessions.every((s, i) => existingCards[i]?.dataset?.sessionId === s.id);
+
+        if (canUpdateInPlace) {
+            sessions.forEach((s, i) => updateCardInPlace(existingCards[i], s));
+            updateGlobalStats(sessions);
+            applySessionFilters();
+            return;
+        }
+
+        // Full render hanya jika struktur sesi berubah (tambah/hapus) atau initial load / force
+        accounts = await getAccounts(forceRender);
+        updateGlobalStats(sessions);
 
         emptyEl.style.display = sessions.length === 0 ? 'flex' : 'none';
         container.innerHTML   = sessions.length === 0
@@ -610,6 +692,14 @@ export async function setupSessionManager() {
     // ── Realtime update dari main process ─────────────────────────────────
     api.onSessionUpdate(async (data) => { await refresh(data); });
 
+    // ── Dengarkan update akun dari main process ───────────────────────────
+    if (api.onAccountUpdate) {
+        api.onAccountUpdate(async (data) => {
+            accountsCache = data?.accounts || null;
+            await refresh(null, true);
+        });
+    }
+
     // ── Per-sesi log streaming ────────────────────────────────────────────
     api.onSessionLog(({ sessionId, line }) => {
         // 1. Catat ke riwayat log lokal sesi (untuk ekspor berkas)
@@ -688,9 +778,9 @@ export async function setupSessionManager() {
         
         addLogEntry(sessionId, sessionName, accountName, line);
 
-        // 4. Update ETA secara berkala saat progress log masuk
+        // 4. Update ETA & global stats secara berkala tanpa re-render DOM
         if (line.match(/\[(\d+)\/(\d+)\]/)) {
-            refresh();
+            updateGlobalStats(sessions);
         }
     });
 
