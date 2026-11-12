@@ -251,24 +251,25 @@ export async function setupSessionManager() {
 
     let sessions = [];
     let accounts = [];
+    let accountsCache = null;
 
-    // ── Render semua kartu & Update Statistik Global ──────────────────────────
-    async function refresh(incoming) {
-        sessions = incoming ?? await api.sessionList().catch(() => []);
-        const ad = await api.accountList().catch(() => ({ accounts: [] }));
-        accounts = ad.accounts || [];
+    async function getAccounts(force = false) {
+        if (!accountsCache || force) {
+            const ad = await api.accountList().catch(() => ({ accounts: [] }));
+            accountsCache = ad.accounts || [];
+        }
+        return accountsCache;
+    }
 
-        // Ekspos sessions ke window agar activityLog bisa membaca daftar kategori
-        window.currentSessionsList = sessions;
-
-        const running = sessions.filter(s => s.status === 'running').length;
-        if (countBadge) countBadge.textContent = `${sessions.length} categories`;
+    // ── Update Statistik Global tanpa re-render DOM ──────────────────────────
+    function updateGlobalStats(sessionsList) {
+        const running = sessionsList.filter(s => s.status === 'running').length;
+        if (countBadge) countBadge.textContent = `${sessionsList.length} categories`;
         if (runBadge) {
             runBadge.style.display = running > 0 ? 'inline-flex' : 'none';
             runBadge.textContent = running;
         }
 
-        // 📊 ─── UPDATE STATISTIK GLOBAL ───
         const statActive = document.getElementById('stat-active-sessions');
         const statTotal  = document.getElementById('stat-total-sessions');
         const statTxt    = document.getElementById('stat-global-progress-txt');
@@ -279,7 +280,7 @@ export async function setupSessionManager() {
         let totalTotal   = 0;
         let maxSessionETA = 0;
 
-        sessions.forEach(s => {
+        sessionsList.forEach(s => {
             totalCurrent += s.progress?.current || 0;
             totalTotal   += s.progress?.total || 0;
 
@@ -299,7 +300,7 @@ export async function setupSessionManager() {
         });
 
         if (statActive) statActive.textContent = running;
-        if (statTotal)  statTotal.textContent = sessions.length;
+        if (statTotal)  statTotal.textContent = sessionsList.length;
         if (statTxt)    statTxt.textContent = `${totalCurrent} / ${totalTotal}`;
         if (statFill) {
             const globalPct = totalTotal ? Math.round((totalCurrent / totalTotal) * 100) : 0;
@@ -320,7 +321,82 @@ export async function setupSessionManager() {
                 statETA.style.color = '#fbbf24';
             }
         }
-        // ───────────────────────────────
+    }
+
+    // ── Update satu kartu secara in-place tanpa menghapus elemen DOM ─────────
+    function updateCardInPlace(card, sess) {
+        const isRunning = sess.status === 'running';
+        const isDone    = sess.status === 'completed';
+        const st        = STATUS_LABEL[sess.status] || STATUS_LABEL.idle;
+        const progress  = pct(sess.progress?.current, sess.progress?.total);
+
+        card.classList.toggle('sess-card--running', isRunning);
+
+        const statusPill = card.querySelector('.sess-status-pill');
+        if (statusPill) {
+            statusPill.textContent = st.text;
+            statusPill.style.color = st.color;
+            statusPill.style.borderColor = st.border;
+            statusPill.style.background = st.bg;
+        }
+
+        const progressFill = card.querySelector('.sess-progress-fill');
+        if (progressFill) {
+            progressFill.style.width = `${progress}%`;
+            progressFill.classList.toggle('sess-progress-fill--animated', isRunning);
+        }
+
+        const progressTxt = card.querySelector('.sess-progress-text');
+        if (progressTxt) {
+            progressTxt.textContent = sess.progress?.total
+                ? `Completed: ${sess.progress.current} / ${sess.progress.total} (${progress}%)`
+                : (isRunning ? 'Starting...' : '—');
+        }
+
+        // Nonaktifkan / aktifkan input saat running
+        card.querySelectorAll('.sess-select, .sess-name-input, .sess-pill-btn').forEach(el => {
+            el.disabled = isRunning;
+        });
+
+        // Update tombol start/stop
+        const startBtn = card.querySelector('.sess-btn-start');
+        const stopBtn  = card.querySelector('.sess-btn-stop');
+        if (isRunning && startBtn) {
+            startBtn.className = 'sess-btn-sm sess-btn-stop flex items-center justify-center';
+            startBtn.title = 'Stop process';
+            startBtn.style.cssText = '';
+            startBtn.disabled = false;
+            startBtn.innerHTML = ICONS.stop;
+        } else if (!isRunning && stopBtn) {
+            stopBtn.className = 'sess-btn-sm sess-btn-start flex items-center justify-center';
+            stopBtn.title = isDone ? 'Already completed' : 'Start process';
+            stopBtn.disabled = isDone;
+            stopBtn.style.cssText = isDone ? '' : 'color:#10b981; border-color:rgba(16,185,129,0.2); background:rgba(16,185,129,0.03);';
+            stopBtn.innerHTML = ICONS.start;
+        }
+    }
+
+    // ── Render semua kartu & Update Statistik Global ──────────────────────────
+    async function refresh(incoming, forceRender = false) {
+        sessions = incoming ?? await api.sessionList().catch(() => []);
+        window.currentSessionsList = sessions;
+
+        // Cek apakah kartu DOM sudah ada dan strukturnya sama persis (bisa update in-place)
+        const existingCards = container.querySelectorAll('.sess-card');
+        const canUpdateInPlace = !forceRender &&
+            existingCards.length === sessions.length &&
+            sessions.every((s, i) => existingCards[i]?.dataset?.sessionId === s.id);
+
+        if (canUpdateInPlace) {
+            sessions.forEach((s, i) => updateCardInPlace(existingCards[i], s));
+            updateGlobalStats(sessions);
+            applySessionFilters();
+            return;
+        }
+
+        // Full render hanya jika struktur sesi berubah (tambah/hapus) atau initial load / force
+        accounts = await getAccounts(forceRender);
+        updateGlobalStats(sessions);
 
         emptyEl.style.display = sessions.length === 0 ? 'flex' : 'none';
         container.innerHTML   = sessions.length === 0
@@ -610,6 +686,14 @@ export async function setupSessionManager() {
     // ── Realtime update dari main process ─────────────────────────────────
     api.onSessionUpdate(async (data) => { await refresh(data); });
 
+    // ── Dengarkan update akun dari main process ───────────────────────────
+    if (api.onAccountUpdate) {
+        api.onAccountUpdate(async (data) => {
+            accountsCache = data?.accounts || null;
+            await refresh(null, true);
+        });
+    }
+
     // ── Per-sesi log streaming ────────────────────────────────────────────
     api.onSessionLog(({ sessionId, line }) => {
         // 1. Catat ke riwayat log lokal sesi (untuk ekspor berkas)
@@ -688,9 +772,9 @@ export async function setupSessionManager() {
         
         addLogEntry(sessionId, sessionName, accountName, line);
 
-        // 4. Update ETA secara berkala saat progress log masuk
+        // 4. Update ETA & global stats secara berkala tanpa re-render DOM
         if (line.match(/\[(\d+)\/(\d+)\]/)) {
-            refresh();
+            updateGlobalStats(sessions);
         }
     });
 

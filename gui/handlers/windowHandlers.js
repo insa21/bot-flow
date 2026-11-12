@@ -53,6 +53,16 @@ function setupWindowHandlers(ipcMain, win) {
 
     // Config & prompts
     ipcMain.handle('read-config',  () => readEnv());
+    ipcMain.handle('save-config',  (_, partial) => {
+        try {
+            const current = readEnv();
+            const updated = { ...current, ...partial };
+            writeEnv(updated);
+            return { ok: true, config: updated };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
+    });
     ipcMain.handle('read-prompts', () => readPrompts());
 
     // Export log

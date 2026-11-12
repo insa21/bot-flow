@@ -103,6 +103,20 @@ async function loadConfig() {
     } catch (e) { logToUI(`[GUI] Could not load config: ${e.message}`, 'WARN'); }
 }
 
+// ─── Auto save konfigurasi ke .env ───────────────────────────────────────────
+async function autoSaveConfig() {
+    if (!api.saveConfig) return;
+    const resolution = document.querySelector('input[name="resolution"]:checked')?.value || '2k';
+    const payload = {
+        HEADLESS:            document.getElementById('headless-toggle')?.checked ? 'true' : 'false',
+        IMAGE_SIZE:          resolution,
+        TIMEOUT_MS:          document.getElementById('input-timeout')?.value || '120000',
+        MAX_RETRIES:         document.getElementById('input-retries')?.value || '3',
+        DOWNLOAD_TIMEOUT_MS: document.getElementById('input-dl-timeout')?.value || '300000',
+    };
+    await api.saveConfig(payload).catch(() => {});
+}
+
 // ─── Load prompts dari prompts.txt ────────────────────────────────────────────
 async function loadPrompts() {
     try {
@@ -334,8 +348,15 @@ function setupListeners() {
             document.querySelectorAll('.res-option').forEach(o => o.classList.remove('selected'));
             el.classList.add('selected');
             el.querySelector('input').checked = true;
+            autoSaveConfig();
         });
     });
+
+    // Auto-save untuk konfigurasi sidebar (Headless & Timing & Retry)
+    document.getElementById('headless-toggle')?.addEventListener('change', autoSaveConfig);
+    document.getElementById('input-timeout')?.addEventListener('change', autoSaveConfig);
+    document.getElementById('input-retries')?.addEventListener('change', autoSaveConfig);
+    document.getElementById('input-dl-timeout')?.addEventListener('change', autoSaveConfig);
 
     // Prompts
     const ta = document.getElementById('prompts-textarea');

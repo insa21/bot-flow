@@ -1,4 +1,4 @@
-﻿// preload.js â€” Hanya berisi contextBridge API (bridge antara main & renderer)
+// preload.js â€” Hanya berisi contextBridge API (bridge antara main & renderer)
 'use strict';
 
 const { contextBridge, ipcRenderer } = require('electron');
@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('botAPI', {
 
     // Config & prompts
     readConfig:        ()        => ipcRenderer.invoke('read-config'),
+    saveConfig:        cfg       => ipcRenderer.invoke('save-config', cfg),
     readPrompts:       ()        => ipcRenderer.invoke('read-prompts'),
 
     // Dialogs

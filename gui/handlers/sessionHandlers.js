@@ -128,10 +128,10 @@ function startSession(win, session, globalConfig) {
     const config = session.config || {};
     const headless  = config.headless !== undefined ? config.headless : globalConfig?.headless;
     const imageSize = config.imageSize || globalConfig?.imageSize || '2k';
-    const timeoutMs = config.timeoutMs !== undefined ? config.timeoutMs : (globalConfig?.timeoutMs || 120000);
-    const maxRetries = config.maxRetries !== undefined ? config.maxRetries : (globalConfig?.maxRetries || 3);
-    const ctxTimeout = config.ctxTimeout !== undefined ? config.ctxTimeout : (globalConfig?.ctxTimeout || 15000);
-    const dlTimeout  = config.dlTimeout !== undefined ? config.dlTimeout : (globalConfig?.dlTimeout || 300000);
+    const timeoutMs = globalConfig?.timeoutMs !== undefined ? globalConfig.timeoutMs : (config.timeoutMs || 120000);
+    const maxRetries = globalConfig?.maxRetries !== undefined ? globalConfig.maxRetries : (config.maxRetries || 3);
+    const ctxTimeout = globalConfig?.ctxTimeout !== undefined ? globalConfig.ctxTimeout : (config.ctxTimeout || 15000);
+    const dlTimeout  = globalConfig?.dlTimeout !== undefined ? globalConfig.dlTimeout : (config.dlTimeout || 300000);
     const resume      = config.resume !== undefined ? config.resume : false;
     const typingSpeed = config.typingSpeed || 'normal';
 
@@ -259,10 +259,6 @@ function setupSessionHandlers(ipcMain, win) {
             config: {
                 headless:    false,
                 imageSize:   '2k',
-                timeoutMs:   120000,
-                maxRetries:  3,
-                ctxTimeout:  15000,
-                dlTimeout:   300000,
                 resume:      false,
             }
         };

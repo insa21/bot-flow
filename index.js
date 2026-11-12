@@ -192,9 +192,16 @@ function saveProgress(completed) {
 // ── Cek apakah browser context masih hidup ──
 async function isContextAlive(context) {
     try {
+        if (!context) return false;
         const pages = context.pages();
-        if (pages.length === 0) return true; // context ada, belum ada page
-        await pages[0].evaluate(() => true);
+        const livePage = pages.find(p => !p.isClosed());
+        if (livePage) {
+            await livePage.evaluate(() => true);
+            return true;
+        }
+        // Jika tidak ada page terbuka, pastikan context benar-benar bisa membuat page
+        const testPage = await context.newPage();
+        await testPage.close();
         return true;
     } catch {
         return false;
@@ -203,9 +210,6 @@ async function isContextAlive(context) {
 
 // ── Launch browser baru (bisa dipanggil ulang saat crash) ──
 async function launchBrowser() {
-    killExistingChrome();
-    await new Promise(r => setTimeout(r, 2000));
-
     const userDataDir = process.env.USER_DATA_DIR || './browser_session';
     const isHeadless  = process.env.HEADLESS === 'true';
 
@@ -216,9 +220,9 @@ async function launchBrowser() {
         || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
     // ── Versi HARUS cocok dengan binary Chrome yang dijalankan ─────────────────
-    // Cek versi Chrome yang terinstall: 150.0.7871.46
-    const CHROME_VERSION  = '150.0.7871.46';
-    const CHROME_MAJOR    = '150';
+    // Cek versi Chrome yang terinstall: 153.0.8010.52
+    const CHROME_VERSION  = '153.0.8010.52';
+    const CHROME_MAJOR    = '153';
     const UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_VERSION} Safari/537.36`;
 
     log(`Launching Chrome ${CHROME_MAJOR} (real binary)...`);
@@ -239,7 +243,6 @@ async function launchBrowser() {
             '--disable-blink-features=AutomationControlled',
             '--exclude-switches=enable-automation',
             // ── Stabilitas ──
-            '--no-sandbox',
             '--no-first-run',
             '--no-default-browser-check',
             '--disable-default-apps',
@@ -249,12 +252,11 @@ async function launchBrowser() {
             '--disable-renderer-backgrounding',
             '--disable-ipc-flooding-protection',
             '--force-device-scale-factor=1',
-            // ── Kurangi noise & fingerprint ──
-            '--disable-features=TranslateUI,AutofillServerCommunication,Translate',
+            // ── Kurangi noise & fingerprint & cegah crash network service download ──
+            '--disable-features=TranslateUI,AutofillServerCommunication,Translate,NetworkServiceSandbox',
             '--disable-infobars',
             '--lang=en-US',
             '--metrics-recording-only',
-            '--disable-breakpad',
         ],
         // ── Header HTTP default agar mirip browser asli ──
         extraHTTPHeaders: {
@@ -1188,36 +1190,58 @@ async function downloadViaFlowMenu(page, imgLocator, imageSize, filePath) {
  * Dipakai jika simulasi klik menu gagal atau untuk mode native.
  */
 async function downloadImageDirect(page, src, filePath) {
-    if (src.startsWith('blob:')) {
-        const base64 = await page.evaluate(async (blobUrl) => {
-            const response = await fetch(blobUrl);
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }, src);
-        fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
-        return true;
-    }
-
-    if (src.startsWith('data:image')) {
-        const base64 = src.split(',')[1];
-        if (base64) {
-            fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
-            return true;
+    try {
+        if (src.startsWith('blob:')) {
+            if (!page || page.isClosed()) return false;
+            const base64 = await page.evaluate(async (blobUrl) => {
+                const response = await fetch(blobUrl);
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            }, src).catch(() => null);
+            if (base64) {
+                fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+                return true;
+            }
+            return false;
         }
-        return false;
-    }
 
-    if (src.startsWith('http://') || src.startsWith('https://')) {
-        const response = await page.request.get(src);
-        if (response.ok()) {
-            fs.writeFileSync(filePath, await response.body());
-            return true;
+        if (src.startsWith('data:image')) {
+            const base64 = src.split(',')[1];
+            if (base64) {
+                fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+                return true;
+            }
+            return false;
         }
+
+        if (src.startsWith('http://') || src.startsWith('https://')) {
+            // Coba via page.request jika page masih hidup
+            if (page && !page.isClosed()) {
+                try {
+                    const response = await page.request.get(src);
+                    if (response.ok()) {
+                        fs.writeFileSync(filePath, await response.body());
+                        return true;
+                    }
+                } catch { /* coba Node fetch di bawah */ }
+            }
+            // Fallback: Node native fetch
+            try {
+                const res = await fetch(src);
+                if (res.ok) {
+                    const buffer = Buffer.from(await res.arrayBuffer());
+                    fs.writeFileSync(filePath, buffer);
+                    return true;
+                }
+            } catch { /* gagal */ }
+            return false;
+        }
+    } catch {
         return false;
     }
 
@@ -1414,7 +1438,7 @@ async function downloadAllNewImages(page, newSrcs, baseName, outputDir, imageSiz
 // ============================================================
 async function isPageAlive(page) {
     try {
-        await page.evaluate(() => true);
+        if (!page || page.isClosed()) return false;
         return true;
     } catch {
         return false;
@@ -1560,7 +1584,7 @@ async function runAutomation() {
     if (prompts.length === 0) { log('prompts.txt is empty.', 'ERROR'); return; }
 
     const imageSize = (process.env.IMAGE_SIZE || '2k').toLowerCase();
-    const timeoutMs  = parseInt(process.env.TIMEOUT_MS)  || 60000;
+    const timeoutMs  = parseInt(process.env.TIMEOUT_MS)  || 120000;
     const maxRetries = parseInt(process.env.MAX_RETRIES)  || 3;
     const MAX_BROWSER_RELAUNCHES = 5; // batas relaunch browser sebelum berhenti total
 
@@ -1628,6 +1652,8 @@ async function runAutomation() {
                     // ── Retry loop khusus policy error (terpisah dari retry umum) ──
                     const MAX_POLICY_RETRIES = 5;
                     let policyRetryCount = 0;
+                    const MAX_UNUSUAL_RETRIES = 2;
+                    let unusualRetryCount = 0;
                     let attemptSuccess = false;
 
                     while (true) {
@@ -1645,9 +1671,8 @@ async function runAutomation() {
                         await fillPromptInput(page, promptInput, prompt);
                         await page.waitForTimeout(randomDelay(400, 700));
 
-                        // Setup deteksi network SEBELUM Enter & submit
-                        const dlTimeoutMs = parseInt(process.env.DOWNLOAD_TIMEOUT_MS) || 300000;
-                        const detectionPromise = setupImageDetection(page, srcsBefore, dlTimeoutMs);
+                        // Setup deteksi network SEBELUM Enter & submit (gunakan timeoutMs untuk batas waktu pembuatan AI)
+                        const detectionPromise = setupImageDetection(page, srcsBefore, timeoutMs);
 
                         // Tekan Enter & klik tombol submit ("Mulai pembuatan" / arrow icon)
                         await page.keyboard.press('Enter');
@@ -1689,8 +1714,24 @@ async function runAutomation() {
 
                         // ── Jika Google mendeteksi "unusual activity" (rate limit / bot detection) ──
                         if (unusualActivity) {
-                            const cooldownMs = randomDelay(300000, 600000); // 5–10 menit cooldown
-                            log(`  🛑 Google unusual activity detected! Cooling down for ${Math.round(cooldownMs / 60000)} minutes...`, 'WARN');
+                            unusualRetryCount++;
+                            if (unusualRetryCount > MAX_UNUSUAL_RETRIES) {
+                                log(`  🛑 Google unusual activity persists after ${MAX_UNUSUAL_RETRIES} attempts. Skipping prompt to avoid infinite reload loop.\n`, 'WARN');
+                                const blockedDir  = path.join(OUTPUT_DIR, 'failed');
+                                const blockedFile = path.join(blockedDir, 'unusual_activity.txt');
+                                try {
+                                    if (!fs.existsSync(blockedDir)) fs.mkdirSync(blockedDir, { recursive: true });
+                                    fs.appendFileSync(blockedFile, prompt + '\n', 'utf-8');
+                                    log(`  📝 Prompt saved to failed/unusual_activity.txt`);
+                                } catch { /* abaikan */ }
+                                completed.add(prompt);
+                                saveProgress(completed);
+                                success = true;
+                                break;
+                            }
+
+                            const cooldownMs = randomDelay(180000, 300000); // 3–5 menit cooldown
+                            log(`  🛑 Google unusual activity detected (retry ${unusualRetryCount}/${MAX_UNUSUAL_RETRIES})! Cooling down for ${Math.round(cooldownMs / 60000)} minutes...`, 'WARN');
                             try { await page.waitForTimeout(cooldownMs); } catch { await new Promise(r => setTimeout(r, cooldownMs)); }
                             // Reload halaman setelah cooldown
                             try {
@@ -1804,23 +1845,27 @@ async function runAutomation() {
 
                 } catch (err) {
                     const msg = err.message || '';
-                    const isCtxDead = 
-                        msg.includes('closed') || 
-                        msg.includes('Target page') || 
+                    const isFatalClosed = 
+                        msg.includes('Target page, context or browser has been closed') || 
                         msg.includes('browser has been closed') || 
-                        msg.includes('context') ||
-                        msg.includes('connection closed') ||
-                        msg.includes('Protocol error');
+                        msg.includes('Browser closed') || 
+                        msg.includes('Target closed') || 
+                        msg.includes('connection closed') || 
+                        msg.includes('Protocol error: Connection closed');
                     log(`  ❌ Attempt ${attempt} error: ${msg}`, 'ERROR');
 
-                    if (isCtxDead) {
-                        log('  🔄 Context/browser dead (possibly closed by user). Relaunching browser and retrying this prompt...', 'WARN');
-                        try {
-                            await initBrowser();
-                            attempt--; // Decrement attempt to retry the same prompt attempt
-                        } catch (re) {
-                            log(`  ❌ Relaunch failed: ${re.message}`, 'ERROR');
-                            if (re.message.includes('relaunch')) throw re; // batas relaunch tercapai
+                    if (isFatalClosed) {
+                        const reallyDead = !await isContextAlive(context);
+                        if (reallyDead) {
+                            log('  🔄 Browser context is closed. Relaunching browser and retrying this prompt...', 'WARN');
+                            try {
+                                await initBrowser();
+                            } catch (re) {
+                                log(`  ❌ Relaunch failed: ${re.message}`, 'ERROR');
+                                if (re.message.includes('relaunch')) throw re; // batas relaunch tercapai
+                            }
+                        } else {
+                            log('  ℹ️ Browser context is still alive, skipping unnecessary relaunch.', 'INFO');
                         }
                     } else if (attempt < maxRetries) {
                         await new Promise(r => setTimeout(r, randomDelay(3000, 6000)));

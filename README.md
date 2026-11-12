@@ -1,3 +1,4 @@
+
 # 🤖 Flow Bot
 
 ![Flow Bot Banner](gui/renderer/flow_bot_banner.png)
@@ -12,24 +13,26 @@
 - [🛠️ Teknologi Yang Digunakan](#️-teknologi-yang-digunakan)
 - [📁 Struktur Folder Proyek](#-struktur-folder-proyek)
 - [✅ Prasyarat Sistem](#-prasyarat-sistem)
-- [🚀 Instalasi & Setup](#-instalasi--setup)
+- [🚀 Instalasi &amp; Setup](#-instalasi--setup)
 - [⚙️ Konfigurasi (.env)](#️-konfigurasi-env)
 - [🎮 Cara Menjalankan Aplikasi](#-cara-menjalankan-aplikasi)
 - [📦 Cara Build Aplikasi Menjadi Executable (.exe)](#-cara-build-aplikasi-menjadi-executable-exe)
 - [🔍 Troubleshooting Umum](#-troubleshooting-umum)
-- [🔒 Keamanan & Lisensi](#-keamanan--lisensi)
+- [🔒 Keamanan &amp; Lisensi](#-keamanan--lisensi)
 
 ---
 
 ## ✨ Fitur Utama
 
 ### 1. Core Bot & Automasi (CLI & GUI)
+
 * 🎨 **Multi-resolusi**: Mendukung download gambar dengan resolusi `native` (~1024px), `1K` (1024px via menu), `2K` (~2048px via upscale server Google), dan `4K` (~4096px - membutuhkan akun Google One/Pro).
 * 🛡️ **Anti-detection**: Menyembunyikan parameter webdriver, men-spoof `visibilityState` agar tab tetap aktif meskipun di-background, dan menggerakkan mouse secara sintetik secara berkala.
 * 💾 **Resume Otomatis**: Melacak progress unduhan melalui `.progress.json` sehingga bot dapat melanjutkan pekerjaan yang tertunda jika dihentikan di tengah jalan.
 * 🔄 **Mekanisme Fallback Multi-metode**: Melakukan download melalui tiga lapis pengamanan: Direct Fetch intercept, Playwright `saveAs` download event, dan Network URL fallback.
 
 ### 2. Panel Kontrol Electron GUI
+
 * 💻 **Desain Premium Glassmorphism**: Antarmuka bertema gelap modern dengan animasi mikro yang responsif dan tata letak sidebar yang dapat disesuaikan.
 * 📝 **Interactive Prompt Editor**:
   * Menulis dan memformat ratusan prompt langsung di aplikasi.
@@ -57,14 +60,14 @@
 
 ## 🛠️ Teknologi Yang Digunakan
 
-| Komponen | Teknologi | Kegunaan |
-|---|---|---|
-| **Core Automation** | [Playwright](https://playwright.dev/) | Automasi dan navigasi browser Chromium |
-| **GUI Runtime** | [Electron](https://www.electronjs.org/) | Framework aplikasi desktop lintas platform |
-| **Interface Styling** | CSS Vanilla (Custom) & [Tailwind CSS v3](https://tailwindcss.com/) | Kerangka desain responsif dan styling visual UI |
-| **Image Processing** | [Sharp](https://sharp.pixelplumbing.com/) | Optimasi, pengenalan, dan pemrosesan gambar lokal |
-| **App Builder** | [Electron Builder](https://www.electron.build/) | Pengemasan aplikasi menjadi installer Windows (`.exe`) |
-| **Configuration** | [Dotenv](https://github.com/motdotla/dotenv) | Pengelolaan environment variables (`.env`) |
+| Komponen                    | Teknologi                                                        | Kegunaan                                                 |
+| --------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| **Core Automation**   | [Playwright](https://playwright.dev/)                             | Automasi dan navigasi browser Chromium                   |
+| **GUI Runtime**       | [Electron](https://www.electronjs.org/)                           | Framework aplikasi desktop lintas platform               |
+| **Interface Styling** | CSS Vanilla (Custom) &[Tailwind CSS v3](https://tailwindcss.com/) | Kerangka desain responsif dan styling visual UI          |
+| **Image Processing**  | [Sharp](https://sharp.pixelplumbing.com/)                         | Optimasi, pengenalan, dan pemrosesan gambar lokal        |
+| **App Builder**       | [Electron Builder](https://www.electron.build/)                   | Pengemasan aplikasi menjadi installer Windows (`.exe`) |
+| **Configuration**     | [Dotenv](https://github.com/motdotla/dotenv)                      | Pengelolaan environment variables (`.env`)             |
 
 ---
 
@@ -122,6 +125,7 @@ bot2/
 ## ✅ Prasyarat Sistem
 
 Sebelum menjalankan aplikasi, pastikan sistem Anda memenuhi prasyarat berikut:
+
 * **Node.js**: Versi **18 atau yang lebih baru** (Direkomendasikan versi LTS terbaru) -> [Download Node.js](https://nodejs.org/)
 * **Operating System**: Windows 10 / 11 (Diperlukan karena bot menggunakan perintah command prompt bawaan seperti `taskkill` untuk manajemen proses Chrome).
 * **Akun Google**: Akun Google yang aktif dengan akses ke Google Flow.
@@ -132,29 +136,38 @@ Sebelum menjalankan aplikasi, pastikan sistem Anda memenuhi prasyarat berikut:
 ## 🚀 Instalasi & Setup
 
 ### 1. Clone Repository
+
 Buka terminal/CMD dan jalankan perintah:
+
 ```bash
 git clone https://github.com/insa21/bot-flow.git
 cd bot-flow
 ```
 
 ### 2. Install Dependensi Proyek
+
 Install semua dependensi Node.js yang diperlukan:
+
 ```bash
 npm install
 ```
 
 ### 3. Install Browser Playwright Chromium
+
 Playwright memerlukan instalasi browser Chromium internal agar automasi berjalan dengan andal:
+
 ```bash
 npx playwright install chromium
 ```
 
 ### 4. Setup File Environment
+
 Salin berkas `.env.example` menjadi `.env` di root direktori proyek:
+
 ```bash
 copy .env.example .env
 ```
+
 Buka file `.env` yang baru dibuat dan sesuaikan pengaturannya (lihat bagian [Konfigurasi](#-konfigurasi-env) di bawah).
 
 ---
@@ -198,19 +211,25 @@ IMAGE_SIZE=2k
 Aplikasi dapat dijalankan dalam dua mode operasional:
 
 ### A. Mode Graphical User Interface (GUI) - Direkomendasikan
+
 Mode ini mempermudah pengelolaan antrean, monitoring log secara visual, dan manajemen file gambar yang diunduh.
 
 #### 1. Mode Development (dengan Electron Live)
+
 Untuk menjalankan aplikasi GUI dalam lingkungan pengembangan:
+
 ```bash
 npm run gui
 ```
+
 *Tips: Tekan tombol **F12** pada keyboard untuk membuka Electron DevTools jika ingin melakukan inspeksi elemen UI.*
 
 #### 2. Mode Production
+
 Jalankan file `.exe` hasil kompilasi yang ada di dalam folder `dist/` setelah Anda melakukan build aplikasi.
 
 #### Alur Login Pertama Kali di GUI:
+
 1. Klik tombol **Start Bot** di panel kiri bawah GUI.
 2. Jendela browser otomatis terbuka.
 3. Masukkan kredensial akun Google Anda di browser tersebut untuk login.
@@ -220,17 +239,23 @@ Jalankan file `.exe` hasil kompilasi yang ada di dalam folder `dist/` setelah An
 ---
 
 ### B. Mode Command Line Interface (CLI)
+
 Mode ini sangat cocok untuk eksekusi cepat langsung melalui terminal tanpa membuka jendela aplikasi Electron.
 
 #### 1. Isi Prompt
+
 Edit file `prompts.txt` di root proyek dan tuliskan prompt Anda (satu prompt per baris). Baris yang diawali dengan tanda `#` dianggap sebagai komentar dan dilewati.
 
 #### 2. Jalankan Bot
+
 Eksekusi perintah berikut di terminal:
+
 ```bash
 npm start
 ```
+
 Atau alternatifnya:
+
 ```bash
 node index.js
 ```
@@ -242,11 +267,13 @@ node index.js
 Anda dapat mengemas seluruh kode aplikasi GUI menjadi file setup executable (`.exe`) mandiri yang dapat diinstal di komputer Windows lain tanpa memerlukan dependensi Node.js eksternal.
 
 Jalankan perintah berikut:
+
 ```bash
 npm run build:gui
 ```
 
 Proses kompilasi akan berjalan menggunakan `electron-builder` dan hasilnya akan disimpan di dalam folder baru bernama `dist/`:
+
 * File utama: `dist/Flow Bot Setup 1.0.0.exe` (Installer aplikasi).
 * Konfigurasi installer mendukung pemilihan folder instalasi kustom oleh user (*installation directory chooser*).
 
@@ -255,18 +282,22 @@ Proses kompilasi akan berjalan menggunakan `electron-builder` dan hasilnya akan 
 ## 🔍 Troubleshooting Umum
 
 ### ❓ Jendela browser tertutup atau crash dengan kode kesalahan
+
 * **Penyebab**: Terjadi konflik dengan instance Chrome lain atau RAM sistem penuh.
 * **Solusi**: Tutup semua proses Chrome yang berjalan di latar belakang dengan menjalankan perintah berikut di Command Prompt (Administrator):
   ```cmd
   taskkill /F /IM chrome.exe
   ```
+
   Jika masalah berlanjut, Anda dapat menghapus folder sesi lokal `browser_session/` atau `browser_session_gui/` untuk merestart sesi dari awal.
 
 ### ❓ Bot macet pada tulisan "Menunggu halaman Flow siap..."
+
 * **Penyebab**: Sesi login Google kedaluwarsa atau memerlukan verifikasi keamanan tambahan (seperti 2FA).
 * **Solusi**: Pastikan opsi `HEADLESS=false` diatur di `.env` (atau matikan toggle headless di GUI), lalu lakukan proses login/verifikasi 2FA secara manual pada jendela browser Chromium yang muncul.
 
 ### ❓ Gambar gagal didownload dengan resolusi 2K atau 4K
+
 * **Penyebab**: Server Google memerlukan waktu lebih lama untuk melakukan upscale gambar sebelum mengirimkannya ke browser.
 * **Solusi**: Naikkan durasi batas waktu download di file `.env` atau melalui sidebar pengaturan GUI:
   ```env
@@ -275,6 +306,7 @@ Proses kompilasi akan berjalan menggunakan `electron-builder` dan hasilnya akan 
   ```
 
 ### ❓ Tombol Galeri tidak memuat gambar yang baru saja di-download
+
 * **Penyebab**: Folder output gambar berbeda dengan folder pemantauan aktif galeri.
 * **Solusi**: Periksa sidebar pengaturan GUI pada bagian **Output Folder**. Pastikan path menunjuk ke folder yang sesuai (misalnya `./output`). Anda juga dapat mengklik tombol **Open in Explorer** untuk memverifikasi secara langsung keberadaan berkas gambar tersebut.
 
