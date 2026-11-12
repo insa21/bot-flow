@@ -709,9 +709,9 @@ async function checkUnusualActivityError(page) {
     try {
         const unusualTexts = [
             'aktivitas yang tidak biasa',    // ID: "Kami mendapati aktivitas yang tidak biasa"
-            'unusual activity',              // EN
-            'Pusat Bantuan',                 // ID: tombol "Buka Pusat Bantuan"
-            'Help Center',                   // EN versi link
+            'unusual activity',              // EN: "We have detected unusual activity"
+            'unusual traffic',               // EN: "unusual traffic from your computer network"
+            'lalu lintas yang tidak biasa',  // ID variasi
         ];
 
         for (const text of unusualTexts) {
@@ -1655,7 +1655,6 @@ async function runAutomation() {
                     const MAX_UNUSUAL_RETRIES = 2;
                     let unusualRetryCount = 0;
                     let attemptSuccess = false;
-
                     while (true) {
                         const srcsBefore = await page.evaluate(() =>
                             Array.from(document.querySelectorAll('img')).map(img => img.src)

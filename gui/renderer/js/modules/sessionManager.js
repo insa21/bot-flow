@@ -29,6 +29,14 @@ function esc(s) {
 }
 function pct(cur, tot) { return (!tot) ? 0 : Math.min(100, Math.round((cur / tot) * 100)); }
 function catColor(idx) { return CATEGORY_COLORS[idx % CATEGORY_COLORS.length]; }
+const ICONS = {
+    reset: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`,
+    stop: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg>`,
+    start: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>`,
+    delete: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+    log: `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`,
+};
+
 
 /** Buat satu kartu kategori dengan visual minimalis premium (Apple Style) */
 function buildCard(sess, idx, accounts) {
@@ -58,13 +66,11 @@ function buildCard(sess, idx, accounts) {
         ? `<span class="sess-path-display" title="${esc(sess.outputDir)}">${esc(sess.outputDir)}</span>`
         : `<span style="color:#6e7a90;font-style:italic;">Not selected (Auto-created on start)</span>`;
 
-    // Modern SVGs
-    const resetIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
-    const stopIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg>`;
-    const startIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>`;
-    const deleteIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-    const logIcon = `<svg viewBox="0 0 24 24" fill="none" width="10" height="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
-
+    const resetIcon  = ICONS.reset;
+    const stopIcon   = ICONS.stop;
+    const startIcon  = ICONS.start;
+    const deleteIcon = ICONS.delete;
+    const logIcon    = ICONS.log;
     return `
     <div class="sess-card ${isRunning ? 'sess-card--running' : ''}" data-session-id="${esc(sess.id)}" data-idx="${idx}" style="--cat-color: ${color};">
 
